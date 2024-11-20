@@ -1,11 +1,12 @@
-# Nuxt Minimal Starter
+# Chat with local AI
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+## Starting the app
 
-## Setup
+```bash
+cd frontend
+```
 
-Make sure to install dependencies:
-
+### Install dependencies
 ```bash
 # npm
 npm install
@@ -20,11 +21,27 @@ yarn install
 bun install
 ```
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
+### Run app
 ```bash
+# npm
+npm run start-app
+
+# pnpm
+pnpm start-app
+
+# yarn
+yarn start-app
+
+# bun
+bun run start-app
+```
+
+## Or run each module separately
+
+### Nuxt app
+```bash
+cd frontend
+
 # npm
 npm run dev
 
@@ -38,38 +55,34 @@ yarn dev
 bun run dev
 ```
 
-## Production
-
-Build the application for production:
-
+### Docker (from the /frontend directory)
 ```bash
 # npm
-npm run build
+npm run start-docker
 
 # pnpm
-pnpm build
+pnpm start-docker
 
 # yarn
-yarn build
+yarn start-docker
 
 # bun
-bun run build
+bun run start-docker
 ```
 
-Locally preview production build:
-
+### Django server (from the main directory)
 ```bash
-# npm
-npm run preview
+cd django_server
 
-# pnpm
-pnpm preview
+# start virtual environment (on Windows)
+venv/Scripts/activate
 
-# yarn
-yarn preview
+# start virtual environment (on Linux/MacOs)
+source venv/bin/activate
 
-# bun
-bun run preview
+# install packages
+pip install -r requirements.txt
+
+# run server
+python manage.py runserver
 ```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
