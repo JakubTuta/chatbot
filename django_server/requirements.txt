@@ -1,0 +1,13 @@
+django
+djangorestframework
+django-cors-headers
+djangorestframework-simplejwt
+django-utils-six
+python-dotenv
+environs
+pymongo==3.12.3
+djongo==1.2.38
+pytz
+PyJWT
+sqlparse==0.2.4
+requests
