@@ -16,7 +16,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const postRequest = async (url: string, data: any) => {
-    if (!(await authStore.areTokensValid())) {
+    if (!(await authStore.isTokenValid())) {
       authStore.logOut()
 
       return null
@@ -39,7 +39,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const getRequest = async (url: string, params: any) => {
-    if (!(await authStore.areTokensValid())) {
+    if (!(await authStore.isTokenValid())) {
       authStore.logOut()
 
       return null
@@ -127,7 +127,7 @@ export const useChatStore = defineStore('chat', () => {
   const deleteChat = async (model: string, chatId: string) => {
     const url = `all-chats/${model}`
 
-    if (!(await authStore.areTokensValid())) {
+    if (!(await authStore.isTokenValid())) {
       authStore.logOut()
 
       return
@@ -151,7 +151,7 @@ export const useChatStore = defineStore('chat', () => {
   const changeChatTitle = async (model: string, chat: { id: string }, newTitle: string) => {
     const url = `all-chats/${model}`
 
-    if (!(await authStore.areTokensValid())) {
+    if (!(await authStore.isTokenValid())) {
       authStore.logOut()
 
       return

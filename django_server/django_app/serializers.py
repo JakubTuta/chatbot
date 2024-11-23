@@ -4,10 +4,29 @@ from rest_framework import serializers
 from . import models
 
 
+class AIModelVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.AIModelVersion
+        fields: list[str] = ["parameters", "size"]
+
+    def create(self, validated_data) -> models.AIModelVersion:
+        ai_model_version = models.AIModelVersion.objects.create(**validated_data)
+
+        return ai_model_version
+
+
 class AIModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.AIModel
-        fields: list[str] = ["id", "name", "model"]
+        fields: list[str] = [
+            "id",
+            "name",
+            "model",
+            "description",
+            "popularity",
+            "can_process_image",
+            "versions",
+        ]
 
     def create(self, validated_data) -> models.AIModel:
         ai_model = models.AIModel.objects.create(**validated_data)

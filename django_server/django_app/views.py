@@ -12,32 +12,56 @@ from . import functions, models, serializers
 
 
 class AIModels(APIView):
-    def get_authentication_classes(
-        self,
-    ) -> list[type[JWTAuthentication]] | list[typing.Any]:
-        if self.request.method == "POST":
-            return [JWTAuthentication]
-        return []
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    # def get_authentication_classes(
+    #     self,
+    # ) -> list[type[JWTAuthentication]] | list[typing.Any]:
+    #     if self.request.method == "POST":
+    #         return [JWTAuthentication]
+    #     return []
 
-    def get_permission_classes(
-        self,
-    ) -> list[type[IsAuthenticated]] | list[type[AllowAny]]:
-        if self.request.method == "POST":
-            return [IsAuthenticated]
-        return [AllowAny]
+    # def get_permission_classes(
+    #     self,
+    # ) -> list[type[IsAuthenticated]] | list[type[AllowAny]]:
+    #     if self.request.method == "POST":
+    #         return [IsAuthenticated]
+    #     return [AllowAny]
 
     def get(self, request) -> Response:
         # url: /ai-models/
 
-        ai_models: BaseManager[models.AIModel] = models.AIModel.objects.all()
-        serializer = serializers.AIModelSerializer(ai_models, many=True)
+        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all()
+        deserialized_models = []
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        for model in all_models:
+            serializer = serializers.AIModelSerializer(model)
+
+            versions = []
+            for version in model.versions:
+                version_serializer = serializers.AIModelVersionSerializer(version)
+                versions.append(version_serializer.data)
+
+            final_model = serializer.data
+            final_model.pop("id")  # type: ignore
+            final_model["versions"] = versions  # type: ignore
+
+            deserialized_models.append(final_model)
+
+        return Response(deserialized_models, status=status.HTTP_200_OK)
 
     def post(self, request) -> Response:
         # url: /ai-models/
 
-        required_fields: list[str] = ["name", "model"]
+        required_fields: list[str] = [
+            "name",
+            "model",
+            "description",
+            "popularity",
+            "can_process_image",
+            "parameters",
+            "size",
+        ]
         if missing_fields := functions.check_required_fields(
             request.data, required_fields
         ):
@@ -46,18 +70,94 @@ class AIModels(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        serializer = serializers.AIModelSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if request.data["can_process_image"] not in ["true", "false"]:
+            return Response(
+                {
+                    "Error": "Invalid value for 'can_process_image', must be 'true' or 'false'"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        serializer.save()
+        found_model: models.AIModel | None = models.AIModel.objects.filter(
+            model=request.data["model"]
+        ).first()
+
+        if found_model:
+            new_version_data = {
+                "parameters": request.data["parameters"],
+                "size": request.data["size"],
+            }
+            new_version_serializer = serializers.AIModelVersionSerializer(
+                data=new_version_data
+            )
+
+            if not new_version_serializer.is_valid():
+                return Response(
+                    {"Error": "Invalid version data"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            version_instance = models.AIModelVersion(**new_version_serializer.validated_data)  # type: ignore
+
+            found_model.versions.append(version_instance)
+            found_model.save()
+
+            return Response(
+                {
+                    "Status": "Model updated",
+                    "model": found_model.model,
+                    "version": {
+                        "parameters": new_version_data["parameters"],
+                        "size": new_version_data["size"],
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        new_version_data = {
+            "parameters": request.data["parameters"],
+            "size": request.data["size"],
+        }
+        new_version_serializer = serializers.AIModelVersionSerializer(
+            data=new_version_data
+        )
+
+        if not new_version_serializer.is_valid():
+            return Response(
+                {"Error": "Invalid version data"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_version_instance = models.AIModelVersion(**new_version_serializer.validated_data)  # type: ignore
+
+        new_model_data = {
+            "name": request.data["name"],
+            "model": request.data["model"],
+            "description": request.data["description"],
+            "popularity": request.data["popularity"],
+            "versions": [new_version_instance],
+            "can_process_image": request.data["can_process_image"] == "true",
+        }
+        new_model_serializer = serializers.AIModelSerializer(data=new_model_data)
+
+        if not new_model_serializer.is_valid():
+            return Response(
+                {"Error": "Invalid model data"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_model_serializer.save()
 
         return Response(
             {
-                "Status": "Model created",
-                "model": serializer.data,
+                "Status": "New model created",
+                "model": new_model_data["model"],
+                "version": {
+                    "parameters": new_version_data["parameters"],
+                    "size": new_version_data["size"],
+                },
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
         )
 
 

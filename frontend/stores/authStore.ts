@@ -124,13 +124,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const auth = async () => {
+  const isTokenValid = async () => {
     const token = localStorage.getItem(REFRESH_TOKEN)
 
     if (!token) {
       setIsAuth(false)
 
-      return
+      return false
     }
 
     const decodedToken = jwtDecode(token)
@@ -144,45 +144,14 @@ export const useAuthStore = defineStore('auth', () => {
       setIsAuth(true)
     }
 
-    router.push('/chat')
+    return isAuthorized.value
   }
 
-  const areTokensValid = async () => {
-    const accessToken = localStorage.getItem(ACCESS_TOKEN)
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN)
-
-    if (!accessToken || !refreshToken) {
-      return false
+  onMounted(async () => {
+    if (await isTokenValid()) {
+      router.push('/chat')
     }
-
-    const url = '/auth/token/check-and-refresh/'
-
-    try {
-      const response = await api.value.post(url, {
-        access: accessToken,
-        refresh: refreshToken,
-      })
-
-      if (response.status === 200) {
-        const tokens = response.data.token
-
-        localStorage.setItem(ACCESS_TOKEN, tokens.access)
-        localStorage.setItem(REFRESH_TOKEN, tokens.refresh)
-
-        return true
-      }
-    }
-    catch (error) {
-      console.error(error)
-    }
-
-    localStorage.removeItem(ACCESS_TOKEN)
-    localStorage.removeItem(REFRESH_TOKEN)
-
-    return false
-  }
-
-  onMounted(() => auth())
+  })
 
   return {
     isAuthorized,
@@ -190,6 +159,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logOut,
-    areTokensValid,
+    isTokenValid,
   }
 })

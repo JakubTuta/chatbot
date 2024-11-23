@@ -4,20 +4,23 @@ from djongo import models
 # Create your models here.
 
 
+class AIModelVersion(models.Model):
+    parameters = models.TextField()
+    size = models.TextField()
+
+
 class AIModel(models.Model):
     name = models.TextField()
     model = models.TextField()
-
-    def __str__(self):
-        return self.name
+    description = models.TextField()
+    popularity = models.IntegerField(default=0)
+    can_process_image = models.BooleanField(default=False)
+    versions = models.ArrayModelField(model_container=AIModelVersion)
 
 
 class Message(models.Model):
     role = models.TextField()
     content = models.TextField()
-
-    def __str__(self):
-        return f"{self.role}: {self.content}"
 
 
 class ChatHistory(models.Model):
@@ -28,6 +31,3 @@ class ChatHistory(models.Model):
     history = models.ArrayModelField(
         model_container=Message,
     )
-
-    def __str__(self):
-        return self.title

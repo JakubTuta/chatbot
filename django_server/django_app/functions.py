@@ -24,7 +24,6 @@ def ask_bot(model: str, message: str, history: list[dict[str, str]]) -> str | No
             "messages": history + [{"role": "user", "content": message}],
             "stream": False,
         }
-        print(request_data)
 
         response = requests.post(
             url, json=request_data, headers={"Content-Type": "application/json"}

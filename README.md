@@ -43,7 +43,7 @@ bun run start-app
 cd frontend
 
 # npm
-npm run dev
+npm rundev
 
 # pnpm
 pnpm dev
@@ -82,6 +82,17 @@ source venv/bin/activate
 
 # install packages
 pip install -r requirements.txt
+
+# before first start of the server
+# in code editor go to venv/Lib/site-packages/djongo/models/fields.py
+
+# change
+def from_db_value(self, value, expression, connection, context):
+    return self.to_python(value)
+
+# to
+def from_db_value(self, value, expression, connection, context=False):
+    return self.to_python(value)
 
 # run server
 python manage.py runserver

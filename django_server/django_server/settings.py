@@ -103,6 +103,7 @@ WSGI_APPLICATION = "django_server.wsgi.application"
 
 
 # Database
+
 DATABASES = {
     "default": {
         "ENGINE": "djongo",
