@@ -12,3 +12,4 @@ PyJWT
 sqlparse==0.2.4
 requests
 dnspython
+docker

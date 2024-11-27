@@ -1,6 +1,7 @@
 import typing
 
 import requests
+from container.ContainerManager import ContainerManager
 from django.contrib.auth.models import User
 from django.db.models.manager import BaseManager
 from django.http import QueryDict
@@ -17,8 +18,16 @@ def check_required_fields(
 
 
 def ask_bot(model: str, message: str, history: list[dict[str, str]]) -> str | None:
+    container_manager = ContainerManager()
+
+    if (container := container_manager.get_container(model)) is None or (
+        container_port := container_manager.get_container_port(container)
+    ) is None:
+        return None
+
     try:
-        url = "http://localhost:11434/api/chat"
+        url = f"http://localhost:{container_port}/api/chat"
+
         request_data = {
             "model": model,
             "messages": history + [{"role": "user", "content": message}],
@@ -34,7 +43,7 @@ def ask_bot(model: str, message: str, history: list[dict[str, str]]) -> str | No
 
             return response_data
 
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
         return None
 
 

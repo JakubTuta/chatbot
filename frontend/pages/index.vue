@@ -10,20 +10,28 @@ function goToLogIn() {
 function goToRegister() {
   router.push('/auth/register')
 }
+
+function goToModels() {
+  router.push('/models')
+}
 </script>
 
 <template>
   <div style="display: flex; align-items: center; justify-content: center; height: 100%">
     <div v-if="!isLoggedIn">
-      <v-btn
-        class="mr-4"
-        @click="goToLogIn"
-      >
+      <v-btn @click="goToLogIn">
         Login
       </v-btn>
 
-      <v-btn @click="goToRegister">
+      <v-btn
+        class="mx-4"
+        @click="goToRegister"
+      >
         Register
+      </v-btn>
+
+      <v-btn @click="goToModels">
+        Models
       </v-btn>
     </div>
   </div>

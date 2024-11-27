@@ -31,7 +31,9 @@ class AIModels(APIView):
     def get(self, request) -> Response:
         # url: /ai-models/
 
-        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all()
+        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all().order_by(
+            "-popularity"
+        )
         deserialized_models = []
 
         for model in all_models:

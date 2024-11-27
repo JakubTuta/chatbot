@@ -22,4 +22,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("django_app.urls")),
     path("auth/", include("django_auth.urls")),
+    path("docker/", include("container.urls")),
 ]

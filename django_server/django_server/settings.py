@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     # My apps
     "django_app",
     "django_auth",
+    "container",
 ]
 
 MIDDLEWARE = [

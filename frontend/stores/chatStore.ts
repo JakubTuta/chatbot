@@ -1,5 +1,14 @@
+export interface AIModel {
+  name: string
+  model: string
+  description: string
+  popularity: number
+  can_process_image: boolean
+  versions: { parameters: string, size: string }[]
+}
+
 export const useChatStore = defineStore('chat', () => {
-  const aiModels = ref<{ name: string, model: string }[]>([])
+  const aiModels = ref<AIModel[]>([])
   const chatHistoryPerModel = ref<{ [model: string]: { role: 'user' | 'assistant', content: string }[] }>({})
   const allChats = ref<{ [model: string]: { id: string, title: string }[] }>({})
 
@@ -64,7 +73,8 @@ export const useChatStore = defineStore('chat', () => {
   const fetchAIModels = async () => {
     const url = 'ai-models/'
 
-    const response = await getRequest(url, {})
+    // const response = await getRequest(url, {})
+    const response = await api.value.get(url)
 
     if (response?.status === 200) {
       aiModels.value = response.data
