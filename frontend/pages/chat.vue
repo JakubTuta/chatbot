@@ -23,6 +23,9 @@ const { isAuthorized } = storeToRefs(authStore)
 const chatStore = useChatStore()
 const { aiModels, chatHistoryPerModel, allChats, sendingMessage } = storeToRefs(chatStore)
 
+const containerStore = useContainerStore()
+const { containers } = storeToRefs(containerStore)
+
 const mappedAIModels = computed(() => aiModels.value.map(model => ({ title: model.name, value: model.model })))
 
 watch(isAuthorized, async (newValue) => {
@@ -34,33 +37,68 @@ watch(isAuthorized, async (newValue) => {
   if (!aiModels.value.length) {
     await chatStore.fetchAIModels()
 
-    if (aiModels.value.length)
-      selectedModel.value = aiModels.value[0].model
+    // if (aiModels.value.length)
+    //   selectedModel.value = aiModels.value[0].model
   }
-}, { immediate: true })
 
-watch(selectedModel, async (newModel) => {
-  if (!newModel)
-    return
-
-  selectedChatId.value = ''
-
-  if (!allChats.value[newModel]?.length) {
-    await chatStore.fetchAllChats(newModel)
-
-    if (allChats.value[newModel]?.length)
-      selectedChatId.value = allChats.value[newModel][0].id
+  if (!containers.value.length) {
+    await containerStore.getUserContainers()
   }
-}, { immediate: true })
-
-watch(selectedChatId, async (newChatId) => {
-  if (!newChatId || !selectedModel.value)
-    return
-
-  await chatStore.fetchChatHistory(selectedModel.value, newChatId)
-
   loading.value = false
 }, { immediate: true })
+
+// watch(selectedModel, async (newModel) => {
+//   if (!newModel)
+//     return
+
+//   loading.value = true
+
+//   selectedChatId.value = ''
+
+//   if (!allChats.value[newModel]?.length) {
+//     await chatStore.fetchAllChats(newModel)
+
+//     if (allChats.value[newModel]?.length)
+//       selectedChatId.value = allChats.value[newModel][0].id
+//   }
+
+//   loading.value = false
+// }, { immediate: true })
+
+// watch(selectedChatId, async (newChatId) => {
+//   loading.value = true
+
+//   if (!newChatId || !selectedModel.value)
+//     return
+
+//   await chatStore.fetchChatHistory(selectedModel.value, newChatId)
+
+//   loading.value = false
+// }, { immediate: true })
+
+const userPulledModels = computed(() => {
+  if (!containers.value.length || !aiModels.value.length)
+    return []
+
+  return containers.value.map((container) => {
+    const model = aiModels.value.find(model => model.model === container.environment.model)
+
+    if (!model)
+      return null
+
+    const containerModelParameters = container.environment.parameters.split(',')
+    console.log(containerModelParameters)
+    const aiModelParameters = model.versions.map(version => version.parameters)
+
+    const commonParameters = containerModelParameters.filter((param: string) => aiModelParameters.includes(param))
+
+    return commonParameters.map((param: string) => ({
+      title: model.name,
+      value: model.model,
+      parameters: param,
+    }))
+  })
+})
 
 function sendQuestion() {
   if (!selectedModel.value || !message.value)
@@ -118,6 +156,10 @@ function addSpace() {
     style="max-width: 1000px;"
     class="fill-height"
   >
+    <v-btn @click="() => console.log(userPulledModels)">
+      Check
+    </v-btn>
+
     <v-btn
       v-show="!loading && selectedModel && !isShowDrawer"
       style="position: absolute; top: 10px; left: 10px; z-index: 1000"

@@ -1,5 +1,7 @@
+import time
+
 import docker.errors
-from docker.models.containers import Container
+from docker.models.containers import Container, ExecResult
 from docker.models.images import Image
 from docker.models.networks import Network
 from docker.types.containers import DeviceRequest
@@ -54,32 +56,22 @@ class ContainerManager:
         if not self.is_connected() or self.__client is None:
             return []
 
-        all_containers = self.__client.containers.list(
+        all_containers: list[Container] = self.__client.containers.list(
             all=True, filters={"ancestor": "ollama/ollama:latest"}
         )
 
         mapped_containers = []
 
         for container in all_containers:
-            if container.name != "running":
-                mapped_containers.append(ContainerManager.map_container(container))
-                continue
+            status = container.status
+            if status == ContainerManager.CONTAINER_STATUS[
+                "RUNNING"
+            ] and ContainerManager.is_pulling_model(container):
+                status = ContainerManager.CONTAINER_STATUS["PULLING_MODEL"]
 
-            docker_exec = container.exec_run("ollama list")
-            list_models = docker_exec.output.decode("utf-8").split("\n")
-
-            if len(list_models) < 2 or (
-                len(list_models) == 2 and list_models[1].split(" ")[0] == ""
-            ):
-                mapped_containers.append(
-                    ContainerManager.map_container(
-                        container,
-                        status=ContainerManager.CONTAINER_STATUS["PULLING_MODEL"],
-                    )
-                )
-
-            else:
-                mapped_containers.append(ContainerManager.map_container(container))
+            mapped_containers.append(
+                ContainerManager.map_container(container, status=status)
+            )
 
         return mapped_containers
 
@@ -104,6 +96,7 @@ class ContainerManager:
         container_name = ai_model.name
         network_name = "chatbot_network"
         container_port = 11434 + ai_model.id
+        parameters = ai_model_version.parameters
 
         container: Container | None = self.get_container(container_name)
 
@@ -123,7 +116,6 @@ class ContainerManager:
                     network_mode="bridge",
                     device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
                     environment={
-                        "parameters": ai_model_version.parameters,
                         "model": ai_model.model,
                     },
                 )
@@ -132,25 +124,9 @@ class ContainerManager:
                 print(f"Error creating container: {e}")
                 return None
 
-        else:
-            container_params = ContainerManager.get_container_environment_variable(
-                container, "parameters"
-            )
-
-            if container_params:
-                container_params += f",{ai_model_version.parameters}"
-                ContainerManager.add_container_environment_variable(
-                    container, "parameters", container_params
-                )
-            else:
-                ContainerManager.add_container_environment_variable(
-                    container, "parameters", ai_model_version.parameters
-                )
-
         container.start()
-        container.exec_run(
-            f"ollama pull {ai_model.model}:{ai_model_version.parameters}"
-        )
+        time.sleep(2)
+        container.exec_run(f"ollama pull {ai_model.model}:{parameters}")
 
         return container
 
@@ -195,11 +171,11 @@ class ContainerManager:
             ),
             "environment": (
                 {
-                    "parameters": ContainerManager.get_container_environment_variable(
-                        container, "parameters"
-                    ),
                     "model": ContainerManager.get_container_environment_variable(
                         container, "model"
+                    ),
+                    "parameters": ContainerManager.get_container_model_parameters(
+                        container
                     ),
                 }
                 if environment is None
@@ -208,11 +184,42 @@ class ContainerManager:
         }
 
     @staticmethod
+    def get_container_model_parameters(container: Container) -> list[str]:
+        if container.status != ContainerManager.CONTAINER_STATUS["RUNNING"]:
+            return []
+
+        try:
+            container_response: ExecResult = container.exec_run("ollama list")
+            response_data = container_response.output.decode("utf-8").split("\n")[1:-1]
+
+            return [
+                model_entry.split(" ")[0].split(":")[-1]
+                for model_entry in response_data
+            ]
+
+        except:
+            return []
+
+    @staticmethod
+    def is_pulling_model(container: Container) -> bool:
+        try:
+            processes = container.top().get("Processes", [])  # type: ignore
+
+            return any(
+                "ollama pull" in process
+                for process_list in processes
+                for process in process_list
+            )
+
+        except (KeyError, IndexError):
+            return False
+
+    @staticmethod
     def get_container_port(container: Container) -> str | None:
         if container.status != "running":
             return None
 
-        return container.attrs["NetworkSettings"]["Ports"]["11434/tcp"][0]["HostPort"]
+        return container.ports["11434/tcp"][0]["HostPort"]
 
     @staticmethod
     def get_container_environment_variable(
@@ -226,9 +233,3 @@ class ContainerManager:
                 return value
 
         return None
-
-    @staticmethod
-    def add_container_environment_variable(
-        container: Container, key: str, value: str
-    ) -> None:
-        container.attrs["Config"]["Env"].append(f"{key}={value}")

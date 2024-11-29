@@ -13,6 +13,10 @@ export const useContainerStore = defineStore('container', () => {
 
   const containers = ref<Container[]>([])
 
+  const resetState = () => {
+    containers.value = []
+  }
+
   const checkDockerConnection = async () => {
     const url = '/docker/'
 
@@ -50,6 +54,7 @@ export const useContainerStore = defineStore('container', () => {
 
   return {
     containers,
+    resetState,
     checkDockerConnection,
     getUserContainers,
   }

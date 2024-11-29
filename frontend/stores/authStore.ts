@@ -7,13 +7,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   const router = useRouter()
   const snackbarStore = useSnackbarStore()
-  const chatStore = useChatStore()
 
   const apiStore = useApiStore()
   const { api } = storeToRefs(apiStore)
 
   const resetState = () => {
+    const chatStore = useChatStore()
+    const containerStore = useContainerStore()
+
     chatStore.resetState()
+    containerStore.resetState()
 
     isAuthorized.value = false
     loading.value = false

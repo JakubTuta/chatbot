@@ -94,6 +94,30 @@ class Container(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    def get(self, request, model) -> Response:
+        # url: /docker/container/{model}
+
+        docker_client = ContainerManager()
+
+        if not docker_client.is_connected() and not docker_client.connect_to_docker():
+            return Response(
+                {"Status": "Error connecting to Docker"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not (container := docker_client.get_container(model)):
+            return Response(
+                {"Status": "Container not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "Status": "Container found",
+                "container": ContainerManager.map_container(container),
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def post(self, request, model) -> Response:
         # url: /docker/container/{model}?parameters={parameters}
 
