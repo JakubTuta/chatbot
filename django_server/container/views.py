@@ -190,24 +190,26 @@ class Container(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        if not (container := docker_client.get_container(model)):
-            return Response(
-                {"Status": "Container not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+        container_name = f"{model}_{query_model_params}"
 
         if query_method == "stop":
-            container.stop()
+            docker_client.stop_container(container_name)
+
+            return Response(
+                {"Status": "Container stopped"},
+                status=status.HTTP_200_OK,
+            )
 
         elif query_method == "remove":
-            container.remove()
+            docker_client.remove_container(container_name)
+
+            return Response(
+                {"Status": "Container removed"},
+                status=status.HTTP_200_OK,
+            )
 
         else:
             return Response(
                 {"Status": "Invalid method"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        return Response(
-            {"Status": "Container stopped"},
-            status=status.HTTP_200_OK,
-        )

@@ -93,36 +93,42 @@ class ContainerManager:
         if not self.is_connected() or self.__client is None:
             return None
 
-        container_name = ai_model.name
+        container_name = f"{ai_model.model}_{ai_model_version.parameters}"
         network_name = "chatbot_network"
         container_port = 11434 + ai_model.id
         parameters = ai_model_version.parameters
 
-        container: Container | None = self.get_container(container_name)
+        self.close_any_container_on_port(str(container_port))
 
-        if container is None:
-            try:
-                if (self.get_network(network_name)) is None and (
-                    self.create_network(network_name)
-                ) is None:
-                    return None
+        if (container := self.get_container(container_name)) is not None:
+            container.start()
 
-                container = self.__client.containers.create(
-                    name=container_name,
-                    image="ollama/ollama:latest",
-                    detach=True,
-                    ports={"11434/tcp": container_port},
-                    network=network_name,
-                    network_mode="bridge",
-                    device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
-                    environment={
-                        "model": ai_model.model,
-                    },
-                )
+            return container
 
-            except docker.errors.DockerException as e:
-                print(f"Error creating container: {e}")
+        try:
+            if (self.get_network(network_name)) is None and (
+                self.create_network(network_name)
+            ) is None:
                 return None
+
+            container = self.__client.containers.create(
+                name=container_name,
+                image="ollama/ollama:latest",
+                detach=True,
+                ports={"11434/tcp": container_port},
+                network=network_name,
+                network_mode="bridge",
+                device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
+                environment={
+                    "model": ai_model.model,
+                    "parameters": parameters,
+                    "port": container_port,
+                },
+            )
+
+        except docker.errors.DockerException as e:
+            print(f"Error creating container: {e}")
+            return None
 
         container.start()
         time.sleep(2)
@@ -155,6 +161,37 @@ class ContainerManager:
             print(f"Error creating network: {e}")
             return None
 
+    def close_any_container_on_port(self, port: str) -> None:
+        if not self.is_connected() or self.__client is None:
+            return None
+
+        all_containers: list[Container] = self.__client.containers.list(
+            all=True, filters={"ancestor": "ollama/ollama:latest"}
+        )
+        print(all_containers)
+
+        for container in all_containers:
+            if (
+                ContainerManager.get_container_environment_variable(container, "port")
+                == port
+            ):
+                container.stop()
+
+    def stop_container(self, container_name: str) -> None:
+        if not self.is_connected() or self.__client is None:
+            return
+
+        if (container := self.get_container(container_name)) is not None:
+            container.stop()
+
+    def remove_container(self, container_name: str) -> None:
+        if not self.is_connected() or self.__client is None:
+            return
+
+        if (container := self.get_container(container_name)) is not None:
+            container.stop()
+            container.remove()
+
     @staticmethod
     def map_container(
         container: Container,
@@ -167,38 +204,23 @@ class ContainerManager:
             "name": container.name or "No name" if name is None else name,
             "status": container.status if status is None else status,
             "port": (
-                ContainerManager.get_container_port(container) if port is None else port
+                ContainerManager.get_container_environment_variable(container, "port")
+                if port is None
+                else port
             ),
             "environment": (
                 {
                     "model": ContainerManager.get_container_environment_variable(
                         container, "model"
                     ),
-                    "parameters": ContainerManager.get_container_model_parameters(
-                        container
+                    "parameters": ContainerManager.get_container_environment_variable(
+                        container, "parameters"
                     ),
                 }
                 if environment is None
                 else environment
             ),  # type: ignore
         }
-
-    @staticmethod
-    def get_container_model_parameters(container: Container) -> list[str]:
-        if container.status != ContainerManager.CONTAINER_STATUS["RUNNING"]:
-            return []
-
-        try:
-            container_response: ExecResult = container.exec_run("ollama list")
-            response_data = container_response.output.decode("utf-8").split("\n")[1:-1]
-
-            return [
-                model_entry.split(" ")[0].split(":")[-1]
-                for model_entry in response_data
-            ]
-
-        except:
-            return []
 
     @staticmethod
     def is_pulling_model(container: Container) -> bool:
@@ -213,13 +235,6 @@ class ContainerManager:
 
         except (KeyError, IndexError):
             return False
-
-    @staticmethod
-    def get_container_port(container: Container) -> str | None:
-        if container.status != "running":
-            return None
-
-        return container.ports["11434/tcp"][0]["HostPort"]
 
     @staticmethod
     def get_container_environment_variable(
