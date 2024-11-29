@@ -17,11 +17,13 @@ def check_required_fields(
     return missing_fields
 
 
-def ask_bot(model: str, message: str, history: list[dict[str, str]]) -> str | None:
+def ask_bot(
+    model: str, parameters: str, message: str, history: list[dict[str, str]]
+) -> str | None:
     container_manager = ContainerManager()
 
-    if (container := container_manager.get_container(model)) is None or (
-        container_port := container_manager.get_container_port(container)
+    if (
+        container_port := container_manager.get_container_port(model, parameters)
     ) is None:
         return None
 
@@ -29,7 +31,7 @@ def ask_bot(model: str, message: str, history: list[dict[str, str]]) -> str | No
         url = f"http://localhost:{container_port}/api/chat"
 
         request_data = {
-            "model": model,
+            "model": f"{model}:{parameters}",
             "messages": history + [{"role": "user", "content": message}],
             "stream": False,
         }

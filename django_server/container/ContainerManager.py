@@ -168,7 +168,6 @@ class ContainerManager:
         all_containers: list[Container] = self.__client.containers.list(
             all=True, filters={"ancestor": "ollama/ollama:latest"}
         )
-        print(all_containers)
 
         for container in all_containers:
             if (
@@ -191,6 +190,22 @@ class ContainerManager:
         if (container := self.get_container(container_name)) is not None:
             container.stop()
             container.remove()
+
+    def get_container_port(self, model: str, parameters: str) -> str | None:
+        if not self.is_connected() or self.__client is None:
+            return
+
+        container_name = f"{model}_{parameters}"
+        if (
+            container := self.get_container(container_name)
+        ) is None or container.status != "running":
+            return
+
+        container_port = ContainerManager.get_container_environment_variable(
+            container, "port"
+        )
+
+        return container_port
 
     @staticmethod
     def map_container(

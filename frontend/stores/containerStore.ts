@@ -1,3 +1,5 @@
+import type { ContainerModel } from '~/pages/chat.vue'
+
 export type ContainerStatus = 'running' | 'exited' | 'paused' | 'restarting' | 'pulling_model'
 
 export interface Container {
@@ -52,10 +54,26 @@ export const useContainerStore = defineStore('container', () => {
     }
   }
 
+  const runContainer = async (aiModel: ContainerModel) => {
+    const url = `/docker/container/${aiModel.model}?parameters=${aiModel.parameters}`
+
+    try {
+      const response = await api.value.post(url, {})
+
+      if (response.status === 201) {
+        getUserContainers()
+      }
+    }
+    catch (error) {
+      console.error(error)
+    }
+  }
+
   return {
     containers,
     resetState,
     checkDockerConnection,
     getUserContainers,
+    runContainer,
   }
 })

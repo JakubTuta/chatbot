@@ -87,6 +87,10 @@ export const useChatStore = defineStore('chat', () => {
     const response = await getRequest(url, { model })
 
     if (response?.status === 200) {
+      if (!allChats.value[model]) {
+        allChats.value[model] = []
+      }
+
       allChats.value[model] = response.data
     }
   }
@@ -101,10 +105,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const askBot = async (model: string, message: string) => {
-    const url = `ask-bot/${model}`
+  const askBot = async (model: string, parameters: string, chatId: string, message: string) => {
+    const url = `ask-bot/${model}/${chatId}?parameters=${parameters}`
 
     sendingMessage.value = true
+
+    if (!chatHistoryPerModel.value[model]) {
+      chatHistoryPerModel.value[model] = []
+    }
 
     chatHistoryPerModel.value[model].push({
       role: 'user',
@@ -130,8 +138,17 @@ export const useChatStore = defineStore('chat', () => {
 
     if (response?.status === 201) {
       const { id, title } = response.data
+
+      if (!allChats.value[model]) {
+        allChats.value[model] = []
+      }
+
       allChats.value[model].push({ id, title })
+
+      return id
     }
+
+    return null
   }
 
   const deleteChat = async (model: string, chatId: string) => {
@@ -147,6 +164,10 @@ export const useChatStore = defineStore('chat', () => {
       const response = await api.value.delete(url, { data: { chat_id: chatId } })
 
       if (response.status === 200) {
+        if (!allChats.value[model]) {
+          allChats.value[model] = []
+        }
+
         allChats.value[model] = allChats.value[model].filter(chat => chat.id !== chatId)
       }
       else if (response.status === 401) {
@@ -171,6 +192,10 @@ export const useChatStore = defineStore('chat', () => {
       const response = await api.value.put(url, { id: chat.id, title: newTitle })
 
       if (response.status === 200) {
+        if (!allChats.value[model]) {
+          allChats.value[model] = []
+        }
+
         const foundChat = allChats.value[model].find(e => e.id === chat.id)
         if (foundChat) {
           foundChat.title = newTitle

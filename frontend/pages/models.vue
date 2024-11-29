@@ -39,14 +39,14 @@ function chipColor(value: number): string {
 }
 
 function findContainer(aiModel: AIModel): string {
-  const container = containers.value.find(container => container.environment.model === aiModel.model)
-  const containerVersion = selectedVersions.value[aiModel.model]
-
-  if (!container || !containerVersion) {
+  if (!selectedVersions.value[aiModel.model]) {
     return 'Not found'
   }
 
-  if (!container.environment.parameters.split(',').includes(containerVersion.parameters)) {
+  const containerName = `${aiModel.model}_${selectedVersions.value[aiModel.model]!.parameters}`
+  const container = containers.value.find(container => container.name === containerName)
+
+  if (!container) {
     return 'Not found'
   }
 

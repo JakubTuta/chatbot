@@ -3,8 +3,16 @@ import { useDisplay } from 'vuetify';
 
 definePageMeta({ middleware: ['auth'] })
 
+export interface ContainerModel {
+  name: string
+  value: string
+  model: string
+  status: string
+  parameters: string
+}
+
 const loading = ref(false)
-const selectedModel = ref<string | null>(null)
+const selectedModel = ref<ContainerModel | null>(null)
 const message = ref('')
 const selectedChatId = ref('')
 const isShowDrawer = ref(false)
@@ -26,7 +34,37 @@ const { aiModels, chatHistoryPerModel, allChats, sendingMessage } = storeToRefs(
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
 
-const mappedAIModels = computed(() => aiModels.value.map(model => ({ title: model.name, value: model.model })))
+const userPulledModels = computed(() => {
+  if (!containers.value.length || !aiModels.value.length)
+    return []
+
+  const mappedContainers = containers.value.map((container) => {
+    if (container.status === 'pulling_model')
+      return null
+
+    const containerModel = container.environment.model
+    const foundAIModel = aiModels.value.find(model => model.model === containerModel)
+
+    if (!foundAIModel)
+      return null
+
+    return {
+      name: foundAIModel.name,
+      value: `${foundAIModel.model} - ${container.environment.parameters}`,
+      model: containerModel,
+      status: container.status,
+      parameters: container.environment.parameters,
+    } as ContainerModel
+  })
+    .filter(e => e !== null)
+    .sort((a, b) => a.value.localeCompare(b.value))
+
+  if (!selectedModel.value && mappedContainers.length)
+    // eslint-disable-next-line vue/no-side-effects-in-computed-properties
+    selectedModel.value = mappedContainers[0]
+
+  return mappedContainers
+})
 
 watch(isAuthorized, async (newValue) => {
   if (!newValue)
@@ -34,77 +72,54 @@ watch(isAuthorized, async (newValue) => {
 
   loading.value = true
 
-  if (!aiModels.value.length) {
+  if (!aiModels.value.length)
     await chatStore.fetchAIModels()
 
-    // if (aiModels.value.length)
-    //   selectedModel.value = aiModels.value[0].model
-  }
-
-  if (!containers.value.length) {
+  if (!containers.value.length)
     await containerStore.getUserContainers()
-  }
+
   loading.value = false
 }, { immediate: true })
 
-// watch(selectedModel, async (newModel) => {
-//   if (!newModel)
-//     return
-
-//   loading.value = true
-
-//   selectedChatId.value = ''
-
-//   if (!allChats.value[newModel]?.length) {
-//     await chatStore.fetchAllChats(newModel)
-
-//     if (allChats.value[newModel]?.length)
-//       selectedChatId.value = allChats.value[newModel][0].id
-//   }
-
-//   loading.value = false
-// }, { immediate: true })
-
-// watch(selectedChatId, async (newChatId) => {
-//   loading.value = true
-
-//   if (!newChatId || !selectedModel.value)
-//     return
-
-//   await chatStore.fetchChatHistory(selectedModel.value, newChatId)
-
-//   loading.value = false
-// }, { immediate: true })
-
-const userPulledModels = computed(() => {
-  if (!containers.value.length || !aiModels.value.length)
-    return []
-
-  return containers.value.map((container) => {
-    const model = aiModels.value.find(model => model.model === container.environment.model)
-
-    if (!model)
-      return null
-
-    const containerModelParameters = container.environment.parameters.split(',')
-    console.log(containerModelParameters)
-    const aiModelParameters = model.versions.map(version => version.parameters)
-
-    const commonParameters = containerModelParameters.filter((param: string) => aiModelParameters.includes(param))
-
-    return commonParameters.map((param: string) => ({
-      title: model.name,
-      value: model.model,
-      parameters: param,
-    }))
-  })
-})
-
-function sendQuestion() {
-  if (!selectedModel.value || !message.value)
+watch(selectedModel, async (newModel) => {
+  if (!newModel)
     return
 
-  chatStore.askBot(selectedModel.value, message.value)
+  loading.value = true
+
+  selectedChatId.value = ''
+
+  if (!allChats.value[newModel.model]?.length) {
+    await chatStore.fetchAllChats(newModel.model)
+
+    if (allChats.value[newModel.model]?.length)
+      selectedChatId.value = allChats.value[newModel.model][0].id
+  }
+
+  await containerStore.runContainer(newModel)
+
+  loading.value = false
+}, { immediate: true })
+
+watch(selectedChatId, async (newChatId) => {
+  loading.value = true
+
+  if (!newChatId || !selectedModel.value)
+    return
+
+  await chatStore.fetchChatHistory(selectedModel.value.model, newChatId)
+
+  loading.value = false
+}, { immediate: true })
+
+function sendQuestion() {
+  if (!selectedModel.value || !message.value || !selectedChatId.value)
+    return
+
+  const model = selectedModel.value.model
+  const modelParameters = selectedModel.value.parameters
+
+  chatStore.askBot(model, modelParameters, selectedChatId.value, message.value)
 
   message.value = ''
 }
@@ -131,7 +146,8 @@ async function acceptChangeChatTitle(chat: { id: string, title: string }) {
 
   loadingChangeChatTitle.value = true
 
-  await chatStore.changeChatTitle(selectedModel.value, chat, temporaryChatTitle.value)
+  const model = selectedModel.value.model
+  await chatStore.changeChatTitle(model, chat, temporaryChatTitle.value)
 
   loadingChangeChatTitle.value = false
   changingChatTitleId.value = ''
@@ -149,6 +165,13 @@ function addSpace() {
 
   temporaryChatTitle.value += ' '
 }
+
+async function createNewChat(model: string) {
+  const newChatId = await chatStore.createChat(model)
+
+  if (newChatId !== null)
+    selectedChatId.value = newChatId
+}
 </script>
 
 <template>
@@ -156,10 +179,6 @@ function addSpace() {
     style="max-width: 1000px;"
     class="fill-height"
   >
-    <v-btn @click="() => console.log(userPulledModels)">
-      Check
-    </v-btn>
-
     <v-btn
       v-show="!loading && selectedModel && !isShowDrawer"
       style="position: absolute; top: 10px; left: 10px; z-index: 1000"
@@ -201,7 +220,7 @@ function addSpace() {
       </v-list-item>
 
       <v-list-item
-        v-for="chat in allChats[selectedModel] || []"
+        v-for="chat in allChats[selectedModel.model] || []"
         :key="chat.id"
         :title="isChangingMyTitle(chat)
           ? ''
@@ -233,7 +252,7 @@ function addSpace() {
             variant="text"
             icon="mdi-delete"
             color="error"
-            @click="chatStore.deleteChat(selectedModel, chat.id)"
+            @click="chatStore.deleteChat(selectedModel.model, chat.id)"
           />
 
           <v-btn
@@ -250,7 +269,7 @@ function addSpace() {
       <v-list-item class="mt-5">
         <v-btn
           block
-          @click="chatStore.createChat(selectedModel)"
+          @click="createNewChat(selectedModel.model)"
         >
           Create new chat
 
@@ -283,7 +302,9 @@ function addSpace() {
             <v-select
               v-model="selectedModel"
               label="AI Model"
-              :items="mappedAIModels"
+              :items="userPulledModels"
+              :item-title="item => `${item.name} - ${item.parameters}`"
+              return-object
             />
           </v-col>
         </v-row>
@@ -300,7 +321,7 @@ function addSpace() {
                 : `${height - 450}px`"
             >
               <div
-                v-for="(chatMessage, index) in chatHistoryPerModel[selectedModel || ''] || []"
+                v-for="(chatMessage, index) in chatHistoryPerModel[selectedModel?.model || ''] || []"
                 :key="index"
                 :style="chatMessage.role === 'user'
                   ? 'justify-content: flex-end'
