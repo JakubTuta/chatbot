@@ -1,5 +1,3 @@
-import type { ContainerModel } from '~/pages/chat.vue'
-
 export type ContainerStatus = 'running' | 'exited' | 'paused' | 'restarting' | 'pulling_model'
 
 export interface Container {
@@ -54,7 +52,7 @@ export const useContainerStore = defineStore('container', () => {
     }
   }
 
-  const runContainer = async (aiModel: ContainerModel) => {
+  const runContainer = async (aiModel: { model: string, parameters: string }) => {
     const url = `/docker/container/${aiModel.model}?parameters=${aiModel.parameters}`
 
     try {
@@ -69,11 +67,43 @@ export const useContainerStore = defineStore('container', () => {
     }
   }
 
+  const stopContainer = async (aiModel: { model: string, parameters: string }) => {
+    const url = `/docker/container/${aiModel.model}?parameters=${aiModel.parameters}&method=stop`
+
+    try {
+      const response = await api.value.delete(url, {})
+
+      if (response.status === 200) {
+        getUserContainers()
+      }
+    }
+    catch (error) {
+      console.error(error)
+    }
+  }
+
+  const removeContainer = async (aiModel: { model: string, parameters: string }) => {
+    const url = `/docker/container/${aiModel.model}?parameters=${aiModel.parameters}&method=remove`
+
+    try {
+      const response = await api.value.delete(url, {})
+
+      if (response.status === 200) {
+        getUserContainers()
+      }
+    }
+    catch (error) {
+      console.error(error)
+    }
+  }
+
   return {
     containers,
     resetState,
     checkDockerConnection,
     getUserContainers,
     runContainer,
+    stopContainer,
+    removeContainer,
   }
 })

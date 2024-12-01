@@ -1,4 +1,5 @@
 export interface AIModel {
+  id: number
   name: string
   model: string
   description: string
@@ -41,6 +42,8 @@ export const useChatStore = defineStore('chat', () => {
       return response
     }
     catch (error) {
+      authStore.logOut()
+
       console.error(error)
     }
 
@@ -64,6 +67,8 @@ export const useChatStore = defineStore('chat', () => {
       return response
     }
     catch (error) {
+      authStore.logOut()
+
       console.error(error)
     }
 

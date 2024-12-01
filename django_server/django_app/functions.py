@@ -109,3 +109,13 @@ def add_messages_to_history(
 
         chat_history = models.ChatHistory.objects.create(**chat_history_data)
         chat_history.save()
+
+
+def get_version_by_parameters(
+    model: models.AIModel, parameters: str
+) -> models.AIModelVersion | None:
+    versions = model.versions
+
+    return next(
+        (version for version in versions if version.parameters == parameters), None
+    )

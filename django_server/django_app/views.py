@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from . import functions, models, serializers
+from . import functions, models, scrape_ollama, serializers
 
 
 class AIModels(APIView):
@@ -21,6 +21,12 @@ class AIModels(APIView):
         all_models: BaseManager[models.AIModel] = models.AIModel.objects.all().order_by(
             "-popularity"
         )
+
+        if len(all_models) == 0:
+            scrape_ollama.scrape_ollama()
+
+            all_models = models.AIModel.objects.all().order_by("-popularity")
+
         deserialized_models = []
 
         for model in all_models:
@@ -32,7 +38,6 @@ class AIModels(APIView):
                 versions.append(version_serializer.data)
 
             final_model = serializer.data
-            final_model.pop("id")  # type: ignore
             final_model["versions"] = versions  # type: ignore
 
             deserialized_models.append(final_model)
@@ -72,6 +77,14 @@ class AIModels(APIView):
         ).first()
 
         if found_model:
+            if functions.get_version_by_parameters(
+                found_model, request.data["parameters"]
+            ):
+                return Response(
+                    {"Error": "Version already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             new_version_data = {
                 "parameters": request.data["parameters"],
                 "size": request.data["size"],

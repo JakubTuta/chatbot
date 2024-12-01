@@ -35,3 +35,7 @@ services:
 volumes:
   mongodb-data:
     driver: local
+
+networks:
+  chatbot-network:
+    driver: bridge

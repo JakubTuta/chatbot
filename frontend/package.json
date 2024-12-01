@@ -4,9 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start-app": "concurrently \"pnpm run start-docker\" \"pnpm run dev\" \"pnpm run start-server\"",
+    "start-app": "concurrently \"pnpm run dev\" \"pnpm run start-server\"",
     "start-server": "python ../django_server/manage.py runserver",
-    "start-docker": "docker-compose -f ../docker/docker-compose.yaml up -d",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",

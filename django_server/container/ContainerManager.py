@@ -2,7 +2,7 @@ import time
 
 import docker
 import docker.errors
-from docker.models.containers import Container, ExecResult
+from docker.models.containers import Container
 from docker.models.images import Image
 from docker.models.networks import Network
 from docker.types.containers import DeviceRequest
@@ -95,7 +95,7 @@ class ContainerManager:
             return None
 
         container_name = f"{ai_model.model}_{ai_model_version.parameters}"
-        network_name = "chatbot_network"
+        network_name = "chatbot-network"
         container_port = 11434 + ai_model.id
         parameters = ai_model_version.parameters
 
@@ -118,7 +118,6 @@ class ContainerManager:
                 detach=True,
                 ports={"11434/tcp": container_port},
                 network=network_name,
-                network_mode="bridge",
                 device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
                 environment={
                     "model": ai_model.model,

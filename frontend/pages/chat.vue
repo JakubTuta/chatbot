@@ -24,6 +24,7 @@ const userMessageColor = '#168AFF'
 const botMessageColor = '#9F33FF'
 
 const { height, mobile } = useDisplay()
+const router = useRouter()
 
 const authStore = useAuthStore()
 const { isAuthorized } = storeToRefs(authStore)
@@ -86,7 +87,6 @@ watch(selectedModel, async (newModel) => {
     return
 
   loading.value = true
-
   selectedChatId.value = ''
 
   if (!allChats.value[newModel.model]?.length) {
@@ -94,6 +94,9 @@ watch(selectedModel, async (newModel) => {
 
     if (allChats.value[newModel.model]?.length)
       selectedChatId.value = allChats.value[newModel.model][0].id
+
+    else
+      await createNewChat(newModel.model)
   }
 
   await containerStore.runContainer(newModel)
@@ -102,10 +105,10 @@ watch(selectedModel, async (newModel) => {
 }, { immediate: true })
 
 watch(selectedChatId, async (newChatId) => {
-  loading.value = true
-
   if (!newChatId || !selectedModel.value)
     return
+
+  loading.value = true
 
   await chatStore.fetchChatHistory(selectedModel.value.model, newChatId)
 
@@ -172,16 +175,19 @@ async function createNewChat(model: string) {
   if (newChatId !== null)
     selectedChatId.value = newChatId
 }
+
+function goToModels() {
+  router.push('/models')
+}
 </script>
 
 <template>
-  <v-container
-    style="max-width: 1000px;"
-    class="fill-height"
+  <v-row
+    class="mx-4 mt-2"
+    style="position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between"
   >
     <v-btn
       v-show="!loading && selectedModel && !isShowDrawer"
-      style="position: absolute; top: 10px; left: 10px; z-index: 1000"
       @click="isShowDrawer = !isShowDrawer"
     >
       Show chats
@@ -192,14 +198,27 @@ async function createNewChat(model: string) {
       />
     </v-btn>
 
+    <v-spacer />
+
+    <v-btn
+      class="mr-4"
+      @click="goToModels"
+    >
+      Models
+    </v-btn>
+
     <v-btn
       v-show="!loading && isAuthorized"
-      style="position: absolute; top: 10px; right: 10px; z-index: 1000"
       @click="authStore.logOut()"
     >
       Logout
     </v-btn>
+  </v-row>
 
+  <v-container
+    style="max-width: 1000px;"
+    class="fill-height"
+  >
     <v-navigation-drawer
       v-if="!loading && selectedModel"
       v-model="isShowDrawer"
@@ -305,7 +324,24 @@ async function createNewChat(model: string) {
               :items="userPulledModels"
               :item-title="item => `${item.name} - ${item.parameters}`"
               return-object
-            />
+            >
+              <template #prepend-item>
+                <v-list-item
+                  @click="goToModels"
+                >
+                  Add more models
+
+                  <v-icon
+                    icon="mdi-arrow-right"
+                    class="ml-2"
+                  />
+                </v-list-item>
+
+                <v-divider class="my-2" />
+              </template>
+
+              <template #no-data />
+            </v-select>
           </v-col>
         </v-row>
 
