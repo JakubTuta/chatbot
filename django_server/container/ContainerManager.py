@@ -1,12 +1,11 @@
 import time
 
+import docker
 import docker.errors
 from docker.models.containers import Container, ExecResult
 from docker.models.images import Image
 from docker.models.networks import Network
 from docker.types.containers import DeviceRequest
-
-import docker
 
 
 class ContainerManager:
@@ -17,6 +16,8 @@ class ContainerManager:
         "RESTARTING": "restarting",
         "PULLING_MODEL": "pulling_model",
     }
+
+    __client: docker.DockerClient | None = None
 
     def __init__(self) -> None:
         self.connect_to_docker()

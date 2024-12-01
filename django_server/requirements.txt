@@ -6,7 +6,7 @@ django-utils-six
 python-dotenv
 environs
 pymongo==3.12.3
-djongo==1.2.38
+djongo==1.2.31
 pytz
 PyJWT
 sqlparse==0.2.4

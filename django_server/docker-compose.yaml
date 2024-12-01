@@ -22,23 +22,16 @@ services:
       - ME_CONFIG_BASICAUTH_PASSWORD=password
     pull_policy: always
   
-  ollama:
+  chatbot:
     build:
       context: .
-      dockerfile: /ollama/Dockerfile
+      dockerfile: Dockerfile.development
     ports:
-      - 11434:11434
+      - 8000:8000
     volumes:
-      - ollama:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: ["gpu"]
-    pull_policy: always
+      - /var/run/docker.sock:/var/run/docker.sock
+    pull_policy: build
 
 volumes:
   mongodb-data:
-    driver: local
-  ollama:
     driver: local
