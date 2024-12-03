@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import type { AIModel } from '~/stores/chatStore';
 
+const router = useRouter()
+
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
 
 const chatStore = useChatStore()
 const { aiModels } = storeToRefs(chatStore)
 
+const search = ref('')
+const sort = ref('popularityDecreasing')
+const filter = ref('all')
 const selectedVersions = ref<Record<string, { parameters: string, size: string } | null>>({})
 const isWindows = ref(true)
 const escapeCharacter = computed(() => (isWindows.value
@@ -14,9 +19,114 @@ const escapeCharacter = computed(() => (isWindows.value
   : '\\'))
 
 onMounted(() => {
+  const query = router.currentRoute.value.query
+  if (query.search) {
+    search.value = query.search as string
+  }
+  if (query.sort) {
+    sort.value = query.sort as string
+  }
+  if (query.filter) {
+    filter.value = query.filter as string
+  }
+  if (query.windows) {
+    isWindows.value = query.windows === 'true'
+  }
+
   containerStore.getUserContainers()
   chatStore.fetchAIModels()
 })
+
+const preparedAIModels = computed(() => {
+  const searchFunction = (model: AIModel) => {
+    if (!search.value) {
+      return true
+    }
+
+    return model.name.toLowerCase().includes(search.value.toLowerCase())
+  }
+
+  const sortFunction = (a: AIModel, b: AIModel) => {
+    if (sort.value === 'popularityDecreasing') {
+      return b.popularity - a.popularity
+    }
+    else if (sort.value === 'popularityIncreasing') {
+      return a.popularity - b.popularity
+    }
+    else if (sort.value === 'nameAlphabetically') {
+      return a.name.localeCompare(b.name)
+    }
+    else if (sort.value === 'nameReverseAlphabetically') {
+      return b.name.localeCompare(a.name)
+    }
+
+    return 0
+  }
+
+  const filterFunction = (containerStatus: string) => {
+    if (filter.value === 'all') {
+      return true
+    }
+
+    if (filter.value === 'allMyModels') {
+      return containerStatus !== 'not_found'
+    }
+    else if (filter.value === 'runningContainers') {
+      return containerStatus === 'running'
+    }
+    else if (filter.value === 'exitedContainers') {
+      return containerStatus === 'exited'
+    }
+    else if (filter.value === 'pausedContainers') {
+      return containerStatus === 'paused'
+    }
+    else if (filter.value === 'restartingContainers') {
+      return containerStatus === 'restarting'
+    }
+    else if (filter.value === 'pullingModelContainers') {
+      return containerStatus === 'pulling_model'
+    }
+    else if (filter.value === 'notFoundContainers') {
+      return containerStatus === 'not_found'
+    }
+
+    return true
+  }
+
+  const filteredModels = aiModels.value
+    .filter(searchFunction)
+    .sort(sortFunction)
+
+  const finalFilteredModels = filteredModels.map((model) => {
+    const filteredVersions = model.versions.filter((version) => {
+      const containerStatus = findContainerModelParameters(model, version.parameters)
+
+      return filterFunction(containerStatus)
+    })
+
+    return { ...model, versions: filteredVersions }
+  }).filter(model => model.versions.length > 0)
+
+  return finalFilteredModels
+})
+
+const sortItems = [
+  { title: 'Popularity (decreasing)', value: 'popularityDecreasing' },
+  { title: 'Popularity (increasing)', value: 'popularityIncreasing' },
+  { title: 'Name (alphabetically)', value: 'nameAlphabetically' },
+  { title: 'Name (reverse-alphabetically)', value: 'nameReverseAlphabetically' },
+]
+
+const filterItems = [
+  { title: 'All', value: 'all' },
+  { title: 'All my models', value: 'allMyModels' },
+  { title: 'Running containers', value: 'runningContainers' },
+  { title: 'Exited containers', value: 'exitedContainers' },
+  { title: 'Paused containers', value: 'pausedContainers' },
+  { title: 'Restarting containers', value: 'restartingContainers' },
+  { title: 'Pulling model containers', value: 'pullingModelContainers' },
+  { title: 'Not found containers', value: 'notFoundContainers' },
+]
 
 const statusToTitle: { [key: string]: string } = {
   running: 'Running',
@@ -57,6 +167,17 @@ function findContainer(aiModel: AIModel): string {
   }
 
   const containerName = `${aiModel.model}_${selectedVersions.value[aiModel.model]!.parameters}`
+  const container = containers.value.find(container => container.name === containerName)
+
+  if (!container) {
+    return 'not_found'
+  }
+
+  return container.status
+}
+
+function findContainerModelParameters(aiModel: AIModel, parameters: string): string {
+  const containerName = `${aiModel.model}_${parameters}`
   const container = containers.value.find(container => container.name === containerName)
 
   if (!container) {
@@ -177,22 +298,105 @@ function removeContainerCommand(aiModel: AIModel): string[] {
   const containerName = `${aiModel.model}_${parameters}`
 
   const stopCommand = stopContainerCommand(aiModel)
+  const removeCommand = `docker remove ${containerName}`
 
-  return stopCommand.concat([`docker remove ${containerName}`])
+  const containerStatus = findContainer(aiModel)
+  if (containerStatus === 'running')
+    return [...stopCommand, removeCommand]
+
+  return [removeCommand]
 }
 
 function copyToClipboard(text: string): void {
   navigator.clipboard.writeText(text)
 }
+
+function addSearchToQuery(value: string) {
+  if (!value) {
+    router.push({ query: { ...router.currentRoute.value.query, search: undefined } })
+
+    return
+  }
+
+  router.push({ query: { ...router.currentRoute.value.query, search: value } })
+}
+
+function addSortToQuery(value: string) {
+  router.push({ query: { ...router.currentRoute.value.query, sort: value } })
+}
+
+function addFilterToQuery(value: string) {
+  router.push({ query: { ...router.currentRoute.value.query, filter: value } })
+}
+
+function addWindowsToQuery(value: boolean) {
+  router.push({ query: { ...router.currentRoute.value.query, windows: value.toString() } })
+}
 </script>
 
 <template>
   <v-container>
+    <v-btn
+      class="mb-3 mr-4"
+      @click="() => router.push('/')"
+    >
+      Go to main page
+    </v-btn>
+
+    <v-btn
+      class="mb-3"
+      @click="() => router.push('/chat')"
+    >
+      Go to chat page
+    </v-btn>
+
     <v-card>
+      <v-card-title>
+        <v-row class="mt-0">
+          <v-col cols="4">
+            <v-text-field
+              v-model="search"
+              label="Search"
+              outlined
+              clearable
+              prepend-inner-icon="mdi-magnify"
+              @update:model-value="addSearchToQuery"
+            />
+          </v-col>
+
+          <v-col cols="4">
+            <v-select
+              v-model="sort"
+              label="Sort"
+              :items="sortItems"
+              @update:model-value="addSortToQuery"
+            />
+          </v-col>
+
+          <v-col cols="4">
+            <v-select
+              v-model="filter"
+              label="Filter"
+              :items="filterItems"
+              @update:model-value="addFilterToQuery"
+            />
+          </v-col>
+
+          <v-col cols="4">
+            <v-checkbox
+              v-model="isWindows"
+              color="info"
+              label="Windows commands"
+              @update:model-value="addWindowsToQuery"
+            />
+          </v-col>
+        </v-row>
+      </v-card-title>
+
       <v-card-text>
         <v-list>
           <v-list-item
-            v-for="aiModel in aiModels"
+            v-for="aiModel in preparedAIModels"
             :key="aiModel.model"
             class="mb-6"
             lines="three"

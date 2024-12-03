@@ -59,7 +59,8 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem(REFRESH_TOKEN, response.data.token.refresh)
         setIsAuth(true)
 
-        router.push('/chat')
+        if (router.currentRoute.value.path !== '/models')
+          router.push('/chat')
       }
     }
     catch (error) {
@@ -92,7 +93,8 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem(REFRESH_TOKEN, response.data.token.refresh)
         setIsAuth(true)
 
-        router.push('/chat')
+        if (router.currentRoute.value.path !== '/models')
+          router.push('/chat')
       }
     }
     catch (error) {
@@ -151,7 +153,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   onMounted(async () => {
-    if (await isTokenValid()) {
+    if (await isTokenValid() && router.currentRoute.value.path !== '/models') {
       router.push('/chat')
     }
   })
