@@ -21,6 +21,7 @@ RUN rm -f Dockerfile.production
 RUN python replace_context.py
 
 ENV ENVIRONMENT "development"
+ENV DOCKER "true"
 
 # Specify the command to run the application
 CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]

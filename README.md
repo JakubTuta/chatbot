@@ -38,6 +38,21 @@ cd django_server
 docker-compose up -d
 ```
 
+#### 2.5 Running the server locally
+```bash
+cd django_server
+
+pip install -r requirements.txt
+
+python replace_context.py
+
+# ONLY FOR THE FIRST TIME
+# MAKE SURE THE MONGODB DATABASE IS RUNNING ON http://localhost:27017
+python manage.py migrate
+
+python manage.py runserver
+```
+
 Django server is running on `http://localhost:8000`
 
 #### 3. Starting Nuxt app

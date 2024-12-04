@@ -89,6 +89,8 @@ watch(selectedModel, async (newModel) => {
   loading.value = true
   selectedChatId.value = ''
 
+  containerStore.runContainer(newModel)
+
   if (!allChats.value[newModel.model]?.length) {
     await chatStore.fetchAllChats(newModel.model)
 
@@ -98,8 +100,6 @@ watch(selectedModel, async (newModel) => {
     else
       await createNewChat(newModel.model)
   }
-
-  await containerStore.runContainer(newModel)
 
   loading.value = false
 }, { immediate: true })
