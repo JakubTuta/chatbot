@@ -1,12 +1,52 @@
-# Chat with local AI
+# Chatbot
 
-## Starting the app
+## 🚀 Overview
+**Chatbot** is a simple yet powerful tool that allows you to pull and run Large Language Models (LLMs) locally using Docker and Ollama. Designed for developers and enthusiasts, this app makes it easy to chat with advanced AI models directly on your device, ensuring privacy and flexibility.
 
+---
+
+## 🌟 Features
+- **Local Deployment**: Run AI models securely on your own machine—no cloud required.
+- **Docker Support**: Leverage Docker for hassle-free setup and compatibility.
+- **Interactive AI Chat**: Engage with Large Language Models in real-time conversations.
+- **Privacy First**: Your data stays local, giving you complete control.
+- **User friendly UI**: Simple and user friendly front-end app created with Nuxt
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- [Docker](https://www.docker.com/) installed on your machine
+
+### Enabling models to use NVIDIA GPU (increased performance) [optional]
+- Windows [NVIDIA GPUs with WSL2](https://docs.docker.com/desktop/features/gpu/)
+- Linux / MacOS [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
+
+### Installation
+#### 1. Clone the repository:
+```bash
+git clone https://github.com/your-username/chatbot.git
+
+cd chatbot
+```
+
+#### 2. Starting django server
+```bash
+cd django_server
+
+docker-compose up -d
+```
+
+Django server is running on `http://localhost:8000`
+
+#### 3. Starting Nuxt app
 ```bash
 cd frontend
 ```
 
-### Install dependencies
+Install the dependencies:
+
 ```bash
 # npm
 npm install
@@ -21,79 +61,18 @@ yarn install
 bun install
 ```
 
-### Run app
+Start the development server on `http://localhost:3000`:
+
 ```bash
 # npm
-npm run start-app
+npm run dev
 
 # pnpm
-pnpm start-app
-
-# yarn
-yarn start-app
-
-# bun
-bun run start-app
-```
-
-## Or run each module separately
-
-### Nuxt app
-```bash
-cd frontend
-
-# npm
-npm rundev
-
-# pnpm
-pnpm dev
+pnpm run dev
 
 # yarn
 yarn dev
 
 # bun
 bun run dev
-```
-
-### Docker (from the /frontend directory)
-```bash
-# npm
-npm run start-docker
-
-# pnpm
-pnpm start-docker
-
-# yarn
-yarn start-docker
-
-# bun
-bun run start-docker
-```
-
-### Django server (from the main directory)
-```bash
-cd django_server
-
-# start virtual environment (on Windows)
-venv/Scripts/activate
-
-# start virtual environment (on Linux/MacOs)
-source venv/bin/activate
-
-# install packages
-pip install -r requirements.txt
-
-# before first start of the server
-# in code editor go to venv/Lib/site-packages/djongo/models/fields.py
-
-# change
-def from_db_value(self, value, expression, connection, context):
-    return self.to_python(value)
-
-# to
-def from_db_value(self, value, expression, connection, context=False):
-    return self.to_python(value)
-
-# run server
-python manage.py runserver
 ```

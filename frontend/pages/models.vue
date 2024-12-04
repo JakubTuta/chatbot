@@ -210,7 +210,7 @@ function createContainerCommand(aiModel: AIModel): string[] {
   const createCommand = `docker run -d ${escapeCharacter.value}
   --name ${containerName} ${escapeCharacter.value}
   --network chatbot-network ${escapeCharacter.value}
-  --gpus all ${escapeCharacter.value}
+  --gpus=all ${escapeCharacter.value}
   -p ${containerPort}:11434 ${escapeCharacter.value}
   -e model=${aiModel.model} ${escapeCharacter.value}
   -e parameters=${parameters} ${escapeCharacter.value}
