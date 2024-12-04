@@ -41,10 +41,11 @@ export const useChatStore = defineStore('chat', () => {
 
       return response
     }
-    catch (error) {
-      authStore.logOut()
-
+    catch (error: any) {
       console.error(error)
+      if (error.response?.status === 401) {
+        authStore.logOut()
+      }
     }
 
     return null
@@ -66,10 +67,11 @@ export const useChatStore = defineStore('chat', () => {
 
       return response
     }
-    catch (error) {
-      authStore.logOut()
-
+    catch (error: any) {
       console.error(error)
+      if (error.response?.status === 401) {
+        authStore.logOut()
+      }
     }
 
     return null

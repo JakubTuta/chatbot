@@ -11,6 +11,10 @@ function goToRegister() {
   router.push('/auth/register')
 }
 
+function goToChat() {
+  router.push('/chat')
+}
+
 function goToModels() {
   router.push('/models')
 }
@@ -28,6 +32,13 @@ function goToModels() {
         @click="goToRegister"
       >
         Register
+      </v-btn>
+
+      <v-btn
+        class="mr-4"
+        @click="goToChat"
+      >
+        Chat
       </v-btn>
 
       <v-btn @click="goToModels">

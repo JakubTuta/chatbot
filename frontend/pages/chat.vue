@@ -179,6 +179,10 @@ async function createNewChat(model: string) {
 function goToModels() {
   router.push('/models')
 }
+
+function goToMainPage() {
+  router.push('/')
+}
 </script>
 
 <template>
@@ -199,6 +203,13 @@ function goToModels() {
     </v-btn>
 
     <v-spacer />
+
+    <v-btn
+      class="mr-4"
+      @click="goToMainPage"
+    >
+      Main page
+    </v-btn>
 
     <v-btn
       class="mr-4"

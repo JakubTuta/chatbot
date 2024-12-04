@@ -340,7 +340,7 @@ class AskBot(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, model, chat_id) -> Response:
-        # url: /ask-bot/{model}?parameters={parameters}
+        # url: /ask-bot/{model}/{chat_id}?parameters={parameters}
 
         required_fields: list[str] = ["message"]
         if missing_fields := functions.check_required_fields(

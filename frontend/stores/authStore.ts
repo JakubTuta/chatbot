@@ -130,7 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isTokenValid = async () => {
-    const token = localStorage.getItem(REFRESH_TOKEN)
+    const token = localStorage.getItem(ACCESS_TOKEN)
 
     if (!token) {
       setIsAuth(false)

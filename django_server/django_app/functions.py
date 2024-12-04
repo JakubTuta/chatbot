@@ -1,3 +1,4 @@
+import os
 import typing
 
 import requests
@@ -27,8 +28,12 @@ def ask_bot(
     ) is None:
         return None
 
+    # container_name = f"{model}_{parameters}"
+    is_docker = os.getenv("DOCKER", "false") == "true"
+    host_name = "host.docker.internal" if is_docker else "localhost"
+
     try:
-        url = f"http://localhost:{container_port}/api/chat"
+        url = f"http://{host_name}:{container_port}/api/chat/"
 
         request_data = {
             "model": f"{model}:{parameters}",
@@ -45,7 +50,7 @@ def ask_bot(
 
             return response_data
 
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
         return None
 
 

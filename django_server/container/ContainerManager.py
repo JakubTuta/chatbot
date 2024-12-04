@@ -94,24 +94,22 @@ class ContainerManager:
         if not self.is_connected() or self.__client is None:
             return None
 
-        container_name = f"{ai_model.model}_{ai_model_version.parameters}"
+        container_name: str = f"{ai_model.model}_{ai_model_version.parameters}"
         network_name = "chatbot-network"
         container_port = 11434 + ai_model.id
         parameters = ai_model_version.parameters
 
-        self.close_any_container_on_port(str(container_port))
-
         if (container := self.get_container(container_name)) is not None:
+            if container.status == "running":
+                return container
+
             container.start()
 
             return container
 
-        try:
-            if (self.get_network(network_name)) is None and (
-                self.create_network(network_name)
-            ) is None:
-                return None
+        self.close_any_container_on_port(str(container_port))
 
+        try:
             container = self.__client.containers.create(
                 name=container_name,
                 image="ollama/ollama:latest",
@@ -119,6 +117,7 @@ class ContainerManager:
                 ports={"11434/tcp": container_port},
                 network=network_name,
                 device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
+                hostname=container_name,
                 environment={
                     "model": ai_model.model,
                     "parameters": parameters,

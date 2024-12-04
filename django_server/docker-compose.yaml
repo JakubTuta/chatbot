@@ -3,6 +3,8 @@ services:
     image: mongo
     ports:
       - 27017:27017
+    networks:
+      - default
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=password
@@ -14,6 +16,8 @@ services:
     image: mongo-express
     ports:
       - 8081:8081
+    networks:
+      - default
     environment:
       - ME_CONFIG_MONGODB_SERVER=mongodb
       - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
@@ -28,6 +32,8 @@ services:
       dockerfile: Dockerfile.development
     ports:
       - 8000:8000
+    networks:
+      - default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     pull_policy: build
@@ -37,5 +43,6 @@ volumes:
     driver: local
 
 networks:
-  chatbot-network:
+  default:
+    name: chatbot-network
     driver: bridge
