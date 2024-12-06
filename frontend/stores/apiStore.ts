@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 export const useApiStore = defineStore('api', () => {
-  const baseURL = 'http://localhost:8000'
+  const runtimeConfig = useRuntimeConfig()
+  const baseURL = runtimeConfig.public.serverUrl
 
   const api = ref(axios.create({
     baseURL,

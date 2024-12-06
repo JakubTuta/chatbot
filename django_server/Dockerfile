@@ -13,18 +13,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code into the container
 COPY . .
 
-# Remove production files from the directory
-RUN rm -f .env.production
-RUN rm -f Dockerfile.production
-
 # Replace the context in the djongo/models/fields.py file
 RUN python replace_context.py
 
-ENV ENVIRONMENT "development"
+# Set the environment variable
 ENV DOCKER "true"
-
-# Specify the command to run the application
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
 
 # Expose the port the application runs on
 EXPOSE 8000
+
+# Specify the command to run the application
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]

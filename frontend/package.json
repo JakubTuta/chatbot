@@ -4,8 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start-app": "concurrently \"pnpm run dev\" \"pnpm run start-server\"",
-    "start-server": "python ../django_server/manage.py runserver",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
@@ -39,8 +37,5 @@
     "vue-router": "^4.4.0",
     "vue-tsc": "^1.8.27",
     "vuetify": "^3.6.10"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.0"
   }
 }

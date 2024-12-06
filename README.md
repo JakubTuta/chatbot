@@ -23,7 +23,7 @@
 - Windows [NVIDIA GPUs with WSL2](https://docs.docker.com/desktop/features/gpu/)
 - Linux / MacOS [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
 
-### Installation
+## Running app with docker
 #### 1. Clone the repository:
 ```bash
 git clone https://github.com/your-username/chatbot.git
@@ -31,31 +31,49 @@ git clone https://github.com/your-username/chatbot.git
 cd chatbot
 ```
 
-#### 2. Starting django server
+#### 2. Starting app
 ```bash
-cd django_server
-
 docker-compose up -d
 ```
 
-#### 2.5 Running the server locally
+Django server runs on `http://localhost:8000` \
+Nuxt web app runs on `http://localhost:3000`
+
+## Running each module separately
+
+### 1. Starting server
 ```bash
 cd django_server
+```
 
+Install the modules:
+
+```bash
 pip install -r requirements.txt
+```
 
+ONLY FOR THE FIRST TIME:
+
+```bash
 python replace_context.py
+```
 
-# ONLY FOR THE FIRST TIME
-# MAKE SURE THE MONGODB DATABASE IS RUNNING ON http://localhost:27017
+ONLY FOR THE FIRST TIME \
+Make sure the mongodb database is running on `http://localhost:27017`
+
+```bash
 python manage.py migrate
+```
 
+Now you can run server
+
+```bash
 python manage.py runserver
 ```
 
 Django server is running on `http://localhost:8000`
 
-#### 3. Starting Nuxt app
+### 2. Starting Nuxt app
 ```bash
 cd frontend
 ```

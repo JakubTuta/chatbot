@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AIModel } from '~/stores/chatStore';
+import type { AIModel } from '~/stores/chatStore'
 
 const router = useRouter()
 
@@ -301,7 +301,7 @@ function removeContainerCommand(aiModel: AIModel): string[] {
   const removeCommand = `docker remove ${containerName}`
 
   const containerStatus = findContainer(aiModel)
-  if (containerStatus === 'running')
+  if (['running', 'pulling_model'].includes(containerStatus))
     return [...stopCommand, removeCommand]
 
   return [removeCommand]

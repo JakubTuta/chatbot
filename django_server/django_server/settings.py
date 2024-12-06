@@ -17,20 +17,13 @@ from pathlib import Path
 
 import dotenv
 
-IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 IS_DOCKER = os.getenv("DOCKER", "false") == "true"
-
-if IS_PRODUCTION:
-    file_name = ".env.production"
-else:
-    file_name = ".env.development"
-
-dotenv_path = path.join(path.dirname(path.dirname(__file__)), file_name)
-dotenv.load_dotenv(dotenv_path)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+dotenv_path = path.join(BASE_DIR, ".env")
+dotenv.load_dotenv(dotenv_path)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/

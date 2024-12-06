@@ -26,16 +26,26 @@ services:
       - ME_CONFIG_BASICAUTH_PASSWORD=password
     pull_policy: always
   
-  chatbot:
+  server:
     build:
-      context: .
-      dockerfile: Dockerfile.development
+      context: django_server
+      dockerfile: Dockerfile
     ports:
       - 8000:8000
     networks:
       - default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    pull_policy: build
+  
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    networks:
+      - default
     pull_policy: build
 
 volumes:

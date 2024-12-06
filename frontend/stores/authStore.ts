@@ -55,8 +55,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.status === 200) {
         snackbarStore.showSnackbarSuccess('User logged in!')
 
-        localStorage.setItem(ACCESS_TOKEN, response.data.token.access)
-        localStorage.setItem(REFRESH_TOKEN, response.data.token.refresh)
+        localStorage.setItem(ACCESS_TOKEN, response.data.token?.access || '')
+        localStorage.setItem(REFRESH_TOKEN, response.data.token?.refresh || '')
         setIsAuth(true)
 
         if (router.currentRoute.value.path !== '/models')
