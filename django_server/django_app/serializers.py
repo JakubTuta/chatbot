@@ -37,7 +37,7 @@ class AIModelSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Message
-        fields: list[str] = ["role", "content"]
+        fields: list[str] = ["role", "content", "image"]
 
     def create(self, validated_data) -> models.Message:
         message = models.Message.objects.create(**validated_data)

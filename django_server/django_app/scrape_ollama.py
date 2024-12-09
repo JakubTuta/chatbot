@@ -31,6 +31,12 @@ def parse_number(number_str):
         return float(number_str)
 
 
+def can_process_images(text):
+    key_words = ["image", "vision"]
+
+    return any(word in text for word in key_words)
+
+
 def scrape_ollama():
     base_url = "https://ollama.com/library/"
 
@@ -58,7 +64,7 @@ def scrape_ollama():
             ).get_text()
             pull_count_number = parse_number(pull_count)
 
-            if pull_count_number < 500_000:
+            if pull_count_number < 200_000:
                 continue
 
             model_description = get_model_description(model_soup)
@@ -67,12 +73,16 @@ def scrape_ollama():
             for parameters, size in parameter_size_pairs:
                 server_url = "http://localhost:8000/ai-models/"
 
+                can_model_process_images = can_process_images(
+                    title
+                ) or can_process_images(model_description)
+
                 request_data = {
                     "name": title,
                     "model": title,
                     "description": model_description,
                     "popularity": int(pull_count_number),
-                    "can_process_image": "false",
+                    "can_process_image": str(can_model_process_images).lower(),
                     "parameters": parameters,
                     "size": size,
                 }

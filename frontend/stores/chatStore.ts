@@ -10,7 +10,14 @@ export interface AIModel {
 
 export const useChatStore = defineStore('chat', () => {
   const aiModels = ref<AIModel[]>([])
-  const chatHistoryPerModel = ref<{ [model: string]: { role: 'user' | 'assistant', content: string }[] }>({})
+  const chatHistoryPerModel = ref<{
+    [model: string]: {
+      role: 'user' | 'assistant'
+      content: string
+      image: string
+
+    }[]
+  }>({})
   const allChats = ref<{ [model: string]: { id: string, title: string }[] }>({})
 
   const sendingMessage = ref(false)
@@ -112,7 +119,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const askBot = async (model: string, parameters: string, chatId: string, message: string) => {
+  const askBot = async (model: string, parameters: string, chatId: string, message: string, image: string) => {
     const url = `ask-bot/${model}/${chatId}?parameters=${parameters}`
 
     sendingMessage.value = true
@@ -124,14 +131,16 @@ export const useChatStore = defineStore('chat', () => {
     chatHistoryPerModel.value[model].push({
       role: 'user',
       content: message,
+      image,
     })
 
-    const response = await postRequest(url, { model, message })
+    const response = await postRequest(url, { model, message, image })
 
     if (response?.status === 200) {
       chatHistoryPerModel.value[model].push({
         role: 'assistant',
         content: response.data.content,
+        image: '',
       })
     }
 

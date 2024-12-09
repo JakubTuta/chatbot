@@ -46,6 +46,20 @@ Nuxt web app runs on `http://localhost:3000`
 cd django_server
 ```
 
+Create virtual environment
+```bash
+python -m venv venv
+```
+
+Run virtual environment
+```bash
+# on Windows
+venv/Scripts/activate
+
+# on MacOS / Linux
+source venv/bin/activate
+```
+
 Install the modules:
 
 ```bash

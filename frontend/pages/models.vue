@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AIModel } from '~/stores/chatStore'
+import type { AIModel } from '~/stores/chatStore';
 
 const router = useRouter()
 
@@ -9,16 +9,20 @@ const { containers } = storeToRefs(containerStore)
 const chatStore = useChatStore()
 const { aiModels } = storeToRefs(chatStore)
 
+const snackbarStore = useSnackbarStore()
+
+const loading = ref(false)
 const search = ref('')
 const sort = ref('popularityDecreasing')
 const filter = ref('all')
 const selectedVersions = ref<Record<string, { parameters: string, size: string } | null>>({})
 const isWindows = ref(true)
+const canProcessImages = ref(false)
 const escapeCharacter = computed(() => (isWindows.value
   ? '^'
   : '\\'))
 
-onMounted(() => {
+onMounted(async () => {
   const query = router.currentRoute.value.query
   if (query.search) {
     search.value = query.search as string
@@ -32,9 +36,15 @@ onMounted(() => {
   if (query.windows) {
     isWindows.value = query.windows === 'true'
   }
+  if (query.canProcessImages) {
+    canProcessImages.value = query.canProcessImages === 'true'
+  }
 
   containerStore.getUserContainers()
-  chatStore.fetchAIModels()
+
+  loading.value = true
+  await chatStore.fetchAIModels()
+  loading.value = false
 })
 
 const preparedAIModels = computed(() => {
@@ -93,8 +103,15 @@ const preparedAIModels = computed(() => {
     return true
   }
 
+  const canProcessImageFunction = (model: AIModel) => {
+    return canProcessImages.value
+      ? model.can_process_image
+      : true
+  }
+
   const filteredModels = aiModels.value
     .filter(searchFunction)
+    .filter(canProcessImageFunction)
     .sort(sortFunction)
 
   const finalFilteredModels = filteredModels.map((model) => {
@@ -195,7 +212,12 @@ function canCreateContainer(aiModel: AIModel): boolean {
 }
 
 function createContainer(aiModel: AIModel) {
-  startContainer(aiModel)
+  if (!selectedVersions.value[aiModel.model]) {
+    return
+  }
+
+  containerStore.runContainer({ model: aiModel.model, parameters: selectedVersions.value[aiModel.model]!.parameters })
+  snackbarStore.showSnackbarSuccess('Container is being created')
 }
 
 function createContainerCommand(aiModel: AIModel): string[] {
@@ -235,6 +257,7 @@ function startContainer(aiModel: AIModel) {
   }
 
   containerStore.runContainer({ model: aiModel.model, parameters: selectedVersions.value[aiModel.model]!.parameters })
+  snackbarStore.showSnackbarSuccess('Starting container')
 }
 
 function startContainerCommand(aiModel: AIModel): string[] {
@@ -261,6 +284,7 @@ function stopContainer(aiModel: AIModel) {
   }
 
   containerStore.stopContainer({ model: aiModel.model, parameters: selectedVersions.value[aiModel.model]!.parameters })
+  snackbarStore.showSnackbarSuccess('Stopping container')
 }
 
 function stopContainerCommand(aiModel: AIModel): string[] {
@@ -287,6 +311,7 @@ function removeContainer(aiModel: AIModel) {
   }
 
   containerStore.removeContainer({ model: aiModel.model, parameters: selectedVersions.value[aiModel.model]!.parameters })
+  snackbarStore.showSnackbarSuccess('Removing container')
 }
 
 function removeContainerCommand(aiModel: AIModel): string[] {
@@ -329,8 +354,26 @@ function addFilterToQuery(value: string) {
   router.push({ query: { ...router.currentRoute.value.query, filter: value } })
 }
 
-function addWindowsToQuery(value: boolean) {
-  router.push({ query: { ...router.currentRoute.value.query, windows: value.toString() } })
+function addWindowsToQuery(value: boolean | null) {
+  if (value === null) {
+    return
+  }
+
+  if (!value)
+    router.push({ query: { ...router.currentRoute.value.query, windows: 'false' } })
+  else
+    router.push({ query: { ...router.currentRoute.value.query, windows: undefined } })
+}
+
+function addCanProcessImagesToQuery(value: boolean | null) {
+  if (value === null) {
+    return
+  }
+
+  if (value)
+    router.push({ query: { ...router.currentRoute.value.query, canProcessImages: 'true' } })
+  else
+    router.push({ query: { ...router.currentRoute.value.query, canProcessImages: undefined } })
 }
 </script>
 
@@ -350,7 +393,7 @@ function addWindowsToQuery(value: boolean) {
       Go to chat page
     </v-btn>
 
-    <v-card>
+    <v-card :loading="loading">
       <v-card-title>
         <v-row class="mt-0">
           <v-col cols="4">
@@ -388,6 +431,15 @@ function addWindowsToQuery(value: boolean) {
               color="info"
               label="Windows commands"
               @update:model-value="addWindowsToQuery"
+            />
+          </v-col>
+
+          <v-col cols="4">
+            <v-checkbox
+              v-model="canProcessImages"
+              color="info"
+              label="Can process images"
+              @update:model-value="addCanProcessImagesToQuery"
             />
           </v-col>
         </v-row>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDisplay } from 'vuetify'
+import { useDisplay } from 'vuetify';
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -9,6 +9,7 @@ export interface ContainerModel {
   model: string
   status: string
   parameters: string
+  canProcessImages: boolean
 }
 
 const loading = ref(false)
@@ -19,6 +20,7 @@ const isShowDrawer = ref(false)
 const temporaryChatTitle = ref('')
 const changingChatTitleId = ref('')
 const loadingChangeChatTitle = ref(false)
+const image = ref('')
 
 const userMessageColor = '#168AFF'
 const botMessageColor = '#9F33FF'
@@ -39,7 +41,7 @@ const userPulledModels = computed(() => {
   if (!containers.value.length || !aiModels.value.length)
     return []
 
-  const mappedContainers = containers.value.map((container) => {
+  return containers.value.map((container) => {
     if (container.status === 'pulling_model')
       return null
 
@@ -55,16 +57,16 @@ const userPulledModels = computed(() => {
       model: containerModel,
       status: container.status,
       parameters: container.environment.parameters,
+      canProcessImages: foundAIModel.can_process_image,
     } as ContainerModel
   })
     .filter(e => e !== null)
     .sort((a, b) => a.value.localeCompare(b.value))
+})
 
-  if (!selectedModel.value && mappedContainers.length)
-    // eslint-disable-next-line vue/no-side-effects-in-computed-properties
-    selectedModel.value = mappedContainers[0]
-
-  return mappedContainers
+watch(userPulledModels, (newValue) => {
+  if (newValue.length)
+    selectedModel.value = newValue[0]
 })
 
 watch(isAuthorized, async (newValue) => {
@@ -87,19 +89,29 @@ watch(selectedModel, async (newModel) => {
     return
 
   loading.value = true
-  selectedChatId.value = ''
+  softReset()
 
   containerStore.runContainer(newModel)
 
-  if (!allChats.value[newModel.model]?.length) {
+  const chats = allChats.value[newModel.model] || []
+
+  if (!chats.length) {
     await chatStore.fetchAllChats(newModel.model)
 
-    if (allChats.value[newModel.model]?.length)
-      selectedChatId.value = allChats.value[newModel.model][0].id
+    const updatedChats = allChats.value[newModel.model] || []
 
+    if (updatedChats.length)
+      selectedChatId.value = updatedChats[0].id
     else
       await createNewChat(newModel.model)
   }
+
+  const newQueryParams = {
+    model: newModel.model,
+    parameters: newModel.parameters,
+    chatId: selectedChatId.value,
+  }
+  router.push({ query: newQueryParams })
 
   loading.value = false
 }, { immediate: true })
@@ -109,11 +121,22 @@ watch(selectedChatId, async (newChatId) => {
     return
 
   loading.value = true
+  softReset()
 
   await chatStore.fetchChatHistory(selectedModel.value.model, newChatId)
 
+  router.push({ query: { ...router.currentRoute.value.query, chatId: newChatId } })
+
   loading.value = false
 }, { immediate: true })
+
+function softReset() {
+  message.value = ''
+  temporaryChatTitle.value = ''
+  changingChatTitleId.value = ''
+  loadingChangeChatTitle.value = false
+  image.value = ''
+}
 
 function sendQuestion() {
   if (!selectedModel.value || !message.value || !selectedChatId.value)
@@ -122,9 +145,10 @@ function sendQuestion() {
   const model = selectedModel.value.model
   const modelParameters = selectedModel.value.parameters
 
-  chatStore.askBot(model, modelParameters, selectedChatId.value, message.value)
+  chatStore.askBot(model, modelParameters, selectedChatId.value, message.value, image.value)
 
   message.value = ''
+  image.value = ''
 }
 
 function changeChat(chat: { id: string }) {
@@ -182,6 +206,41 @@ function goToModels() {
 
 function goToMainPage() {
   router.push('/')
+}
+
+function toBase64(file: Blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = error => reject(error)
+  })
+}
+
+async function handleImageUpload(event: any) {
+  if (!event.target?.files.length)
+    return
+
+  const file = event.target.files[0]
+
+  const fileInBase64 = await toBase64(file) as string
+  image.value = fileInBase64
+}
+
+function clearImage() {
+  image.value = ''
+}
+
+async function deleteChat(chat: { id: string }) {
+  if (!selectedModel.value)
+    return
+
+  await chatStore.deleteChat(selectedModel.value.model, chat.id)
+
+  if (allChats.value[selectedModel.value.model].length)
+    selectedChatId.value = allChats.value[selectedModel.value.model][0].id
+  else
+    await createNewChat(selectedModel.value.model)
 }
 </script>
 
@@ -282,7 +341,7 @@ function goToMainPage() {
             variant="text"
             icon="mdi-delete"
             color="error"
-            @click="chatStore.deleteChat(selectedModel.model, chat.id)"
+            @click="deleteChat(chat)"
           />
 
           <v-btn
@@ -386,11 +445,26 @@ function goToMainPage() {
                   :max-width="mobile
                     ? '90%'
                     : '70%'"
+                  :class="chatMessage.role === 'user'
+                    ? 'text-align-end'
+                    : 'text-align-start'"
                   class="px-4 py-2"
                 >
                   <span class="text-subtitle-2">
                     {{ chatMessage.content }}
                   </span>
+
+                  <p
+                    v-if="chatMessage.image"
+                    align="end"
+                    class="mt-2"
+                  >
+                    <img
+                      :src="chatMessage.image"
+                      alt="Uploaded image"
+                      style="max-width: 100%; max-height: 100px"
+                    >
+                  </p>
                 </v-list-item>
               </div>
             </v-list>
@@ -403,6 +477,24 @@ function goToMainPage() {
             >
               Bot is thinking...
             </span>
+
+            <v-row
+              v-if="image"
+              justify="end"
+              class="ma-0"
+            >
+              <v-badge
+                icon="mdi-close"
+                color="error"
+                @click="clearImage"
+              >
+                <img
+                  :src="image"
+                  alt="Uploaded image"
+                  style="max-width: 100%; max-height: 100px"
+                >
+              </v-badge>
+            </v-row>
           </v-card-text>
         </v-card>
 
@@ -412,6 +504,27 @@ function goToMainPage() {
             label="Message"
             @keydown.enter="sendQuestion"
           />
+
+          <v-btn
+            v-if="selectedModel?.canProcessImages"
+            variant="flat"
+            class="ml-4 mt-1"
+            icon
+            @click="$refs.fileInput.click()"
+          >
+            <v-icon
+              size="x-large"
+              icon="mdi-file-upload-outline"
+            />
+
+            <input
+              ref="fileInput"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleImageUpload"
+            >
+          </v-btn>
 
           <v-btn
             variant="flat"

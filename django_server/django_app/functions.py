@@ -18,8 +18,31 @@ def check_required_fields(
     return missing_fields
 
 
+def map_history(history: list[dict[str, str]]) -> list[dict[str, str | list[str]]]:
+    return [
+        {
+            "role": message.get("role", ""),
+            "content": message.get("content", ""),
+            **(
+                {
+                    "images": [
+                        image.split(",")[1] if len(image.split(",")) > 1 else image
+                    ]
+                }
+                if (image := message.get("image", ""))
+                else {}
+            ),
+        }
+        for message in history
+    ]
+
+
 def ask_bot(
-    model: str, parameters: str, message: str, history: list[dict[str, str]]
+    model: str,
+    parameters: str,
+    message: str,
+    image: str,
+    history: list[dict[str, str]],
 ) -> str | None:
     container_manager = ContainerManager()
 
@@ -28,16 +51,20 @@ def ask_bot(
     ) is None:
         return None
 
-    # container_name = f"{model}_{parameters}"
     is_docker = os.getenv("DOCKER", "false") == "true"
     host_name = "host.docker.internal" if is_docker else "localhost"
 
     try:
         url = f"http://{host_name}:{container_port}/api/chat/"
 
+        mapped_history = map_history(history)
+        new_message = map_history(
+            [{"role": "user", "content": message, "image": image}]
+        )[0]
+
         request_data = {
             "model": f"{model}:{parameters}",
-            "messages": history + [{"role": "user", "content": message}],
+            "messages": mapped_history + [new_message],
             "stream": False,
         }
 
@@ -51,11 +78,16 @@ def ask_bot(
             return response_data
 
     except requests.exceptions.RequestException as e:
+        print(e)
         return None
 
 
-def create_message(role: str, message: str) -> models.Message:
+def create_message(role: str, message: str, image: str = "") -> models.Message:
     data_dict = {"role": role, "content": message}
+
+    if role == "user" and image:
+        data_dict["image"] = image
+
     serializer = serializers.MessageSerializer(data=data_dict)
     serializer.is_valid(raise_exception=True)
 
@@ -69,6 +101,7 @@ def deserialize_messages(messages: list[models.Message]) -> list[dict[str, str]]
         {
             "role": message.role,
             "content": message.content,
+            "image": message.image,
         }
         for message in messages
     ]

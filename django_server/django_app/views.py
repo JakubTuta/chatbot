@@ -375,11 +375,13 @@ class AskBot(APIView):
         )
 
         user_question: str = request.data["message"]
+        image: str = request.data.get("image", "")
         if (
             bot_response := functions.ask_bot(
                 model,
                 model_parameters,
                 user_question,
+                image,
                 deserialized_chat_history_messages,
             )
         ) is None:
@@ -390,7 +392,7 @@ class AskBot(APIView):
 
         try:
             user_message: models.Message = functions.create_message(
-                "user", user_question
+                "user", user_question, image
             )
             bot_message: models.Message = functions.create_message(
                 "assistant", bot_response

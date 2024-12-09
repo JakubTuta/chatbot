@@ -21,6 +21,7 @@ class AIModel(models.Model):
 class Message(models.Model):
     role = models.TextField()
     content = models.TextField()
+    image = models.TextField(default="")
 
 
 class ChatHistory(models.Model):
