@@ -22,10 +22,6 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Install only production dependencies
-COPY package*.json ./
-RUN npm install
-
 # Copy built assets from the build stage
 COPY --from=builder /app/.output ./.output
 
