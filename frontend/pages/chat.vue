@@ -84,9 +84,12 @@ watch(isAuthorized, async (newValue) => {
   loading.value = false
 }, { immediate: true })
 
-watch(selectedModel, async (newModel) => {
-  if (!newModel)
+watch(selectedModel, async (newModel, oldModel) => {
+  if (!newModel
+    || (newModel.model === (oldModel?.model || '')
+      && newModel.parameters === (oldModel?.parameters || ''))) {
     return
+  }
 
   loading.value = true
   softReset()
@@ -116,8 +119,8 @@ watch(selectedModel, async (newModel) => {
   loading.value = false
 }, { immediate: true })
 
-watch(selectedChatId, async (newChatId) => {
-  if (!newChatId || !selectedModel.value)
+watch(selectedChatId, async (newChatId, oldChatId) => {
+  if (!newChatId || !selectedModel.value || newChatId === oldChatId)
     return
 
   loading.value = true
@@ -315,6 +318,7 @@ async function deleteChat(chat: { id: string }) {
           ? ''
           : chat.title"
         :ripple="!isChangingMyTitle(chat)"
+        :active="selectedChatId === chat.id"
         @click="changeChat(chat)"
       >
         <v-text-field
