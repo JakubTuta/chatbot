@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useSnackbarStore } from '~/stores/snackbarStore';
+import { useSnackbarStore } from '~/stores/snackbarStore'
 
 const snackbarStore = useSnackbarStore()
 const { isShow, text, color } = storeToRefs(snackbarStore)

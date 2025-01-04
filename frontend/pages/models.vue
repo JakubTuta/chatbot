@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AIModel } from '~/stores/chatStore';
+import type { AIModel } from '~/stores/chatStore'
 
 const router = useRouter()
 

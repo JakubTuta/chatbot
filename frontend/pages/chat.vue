@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDisplay } from 'vuetify';
+import { useDisplay } from 'vuetify'
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -245,6 +245,28 @@ async function deleteChat(chat: { id: string }) {
   else
     await createNewChat(selectedModel.value.model)
 }
+
+function splitMessage(message: string) {
+  const parts = message.split(/(```[\s\S]*?```|`[\s\S]*?`)/)
+
+  return parts.map((part) => {
+    if (part.startsWith('```') && part.endsWith('```')) {
+      const [programmingLanguage, code] = part.slice(3, -3).split('\n')
+
+      return { title: 'code', content: code.trim(), language: programmingLanguage.trim() }
+    }
+    else if (part.startsWith('`') && part.endsWith('`')) {
+      return { title: 'filename', content: part.slice(1, -1).trim() }
+    }
+    else {
+      return { title: 'text', content: part.trim() }
+    }
+  })
+}
+
+function copyToClipboard(content: string) {
+  navigator.clipboard.writeText(content)
+}
 </script>
 
 <template>
@@ -454,9 +476,55 @@ async function deleteChat(chat: { id: string }) {
                     : 'text-align-start'"
                   class="px-4 py-2"
                 >
-                  <span class="text-subtitle-2">
+                  <div v-if="chatMessage.role === 'assistant'">
+                    <div
+                      v-for="(part, partIndex) in splitMessage(chatMessage.content)"
+                      :key="partIndex"
+                    >
+                      <div v-if="part.title === 'text'">
+                        {{ part.content }}
+                      </div>
+
+                      <div
+                        v-else-if="part.title === 'code'"
+                        class="my-4"
+                      >
+                        <v-card>
+                          <v-card-title
+                            class="text-subtitle-2"
+                            style="display: flex; justify-content: space-between; align-items: center"
+                          >
+                            <span>
+                              {{ part.language }}
+                            </span>
+
+                            <v-btn
+                              size="x-small"
+                              icon="mdi-content-copy"
+                              @click="copyToClipboard(part.content)"
+                            />
+                          </v-card-title>
+
+                          <v-divider />
+
+                          <v-card-text>
+                            {{ part.content }}
+                          </v-card-text>
+                        </v-card>
+                      </div>
+
+                      <div
+                        v-else-if="part.title === 'filename'"
+                        class="font-weight-bold text-subtitle-1 ma-3"
+                      >
+                        {{ part.content }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else>
                     {{ chatMessage.content }}
-                  </span>
+                  </div>
 
                   <p
                     v-if="chatMessage.image"
