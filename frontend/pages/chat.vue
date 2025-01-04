@@ -247,16 +247,14 @@ async function deleteChat(chat: { id: string }) {
 }
 
 function splitMessage(message: string) {
-  const parts = message.split(/(```[\s\S]*?```|`[\s\S]*?`)/)
+  const parts = message.split(/(```[\s\S]*?```)/)
 
   return parts.map((part) => {
     if (part.startsWith('```') && part.endsWith('```')) {
-      const [programmingLanguage, code] = part.slice(3, -3).split('\n')
+      const programmingLanguage = part.match(/```(.*)\n/)?.[1] || ''
+      const code = part.replace(/```(.*)\n|```$/g, '')
 
       return { title: 'code', content: code.trim(), language: programmingLanguage.trim() }
-    }
-    else if (part.startsWith('`') && part.endsWith('`')) {
-      return { title: 'filename', content: part.slice(1, -1).trim() }
     }
     else {
       return { title: 'text', content: part.trim() }
@@ -481,7 +479,10 @@ function copyToClipboard(content: string) {
                       v-for="(part, partIndex) in splitMessage(chatMessage.content)"
                       :key="partIndex"
                     >
-                      <div v-if="part.title === 'text'">
+                      <div
+                        v-if="part.title === 'text'"
+                        style="white-space: pre-wrap"
+                      >
                         {{ part.content }}
                       </div>
 
@@ -492,7 +493,7 @@ function copyToClipboard(content: string) {
                         <v-card>
                           <v-card-title
                             class="text-subtitle-2"
-                            style="display: flex; justify-content: space-between; align-items: center"
+                            style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
                           >
                             <span>
                               {{ part.language }}
@@ -505,19 +506,13 @@ function copyToClipboard(content: string) {
                             />
                           </v-card-title>
 
-                          <v-divider />
-
-                          <v-card-text>
+                          <v-card-text
+                            style="white-space: pre-wrap"
+                            class="mt-3"
+                          >
                             {{ part.content }}
                           </v-card-text>
                         </v-card>
-                      </div>
-
-                      <div
-                        v-else-if="part.title === 'filename'"
-                        class="font-weight-bold text-subtitle-1 ma-3"
-                      >
-                        {{ part.content }}
                       </div>
                     </div>
                   </div>
