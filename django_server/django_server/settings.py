@@ -108,7 +108,7 @@ WSGI_APPLICATION = "django_server.wsgi.application"
 
 # Database
 DATABASE_HOST = (
-    os.getenv("DATABASE_HOST") if IS_DOCKER else os.getenv("LOCAL_DATABASE_HOST")
+    os.getenv("DOCKER_DATABASE_HOST") if IS_DOCKER else os.getenv("LOCAL_DATABASE_HOST")
 )
 
 DATABASES = {

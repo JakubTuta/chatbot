@@ -1,3 +1,5 @@
+import sys
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -37,69 +39,84 @@ def can_process_images(text):
     return any(word in text for word in key_words)
 
 
-def scrape_ollama():
+def scrape_ollama(min_pull_count: int) -> bool:
     base_url = "https://ollama.com/library/"
 
     response = requests.get(base_url)
 
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, "html.parser")
+    if response.status_code != 200:
+        print("Failed to fetch the models")
 
-        models = soup.find_all("h2")
-        models.pop(0)
+        return False
 
-        for model in models:
-            title = model.get_text().strip()
+    soup = BeautifulSoup(response.content, "html.parser")
 
-            if title == "":
-                continue
+    models = soup.find_all("h2")
+    models.pop(0)
 
-            url = base_url + title
+    for model in models:
+        title = model.get_text().strip()
 
-            model_response = requests.get(url)
-            model_soup = BeautifulSoup(model_response.content, "html.parser")
+        if title == "":
+            continue
 
-            pull_count = model_soup.find(
-                "span", attrs={"x-test-pull-count": True}
-            ).get_text()
-            pull_count_number = parse_number(pull_count)
+        url = base_url + title
 
-            if pull_count_number < 200_000:
-                continue
+        model_response = requests.get(url)
+        model_soup = BeautifulSoup(model_response.content, "html.parser")
 
-            model_description = get_model_description(model_soup)
-            parameter_size_pairs = get_parameter_size_pairs(model_soup)
+        pull_count = model_soup.find("span", attrs={"x-test-pull-count": True})
 
-            for parameters, size in parameter_size_pairs:
-                server_url = "http://localhost:8000/ai-models/"
+        if not pull_count:
+            continue
 
-                can_model_process_images = can_process_images(
-                    title
-                ) or can_process_images(model_description)
+        pull_count_number = parse_number(pull_count.get_text())
 
-                request_data = {
-                    "name": title,
-                    "model": title,
-                    "description": model_description,
-                    "popularity": int(pull_count_number),
-                    "can_process_image": str(can_model_process_images).lower(),
-                    "parameters": parameters,
-                    "size": size,
-                }
+        if pull_count_number < min_pull_count:
+            continue
 
-                response = requests.post(
-                    server_url,
-                    json=request_data,
-                    headers={"Content-Type": "application/json"},
-                )
+        model_description = get_model_description(model_soup)
+        parameter_size_pairs = get_parameter_size_pairs(model_soup)
 
-                if response.status_code == 201:
-                    print(f"Model {title} added successfully")
-                elif response.status_code == 200:
-                    print(f"Model {title} updated successfully")
-                else:
-                    print(f"Model {title} failed to add")
+        for parameters, size in parameter_size_pairs:
+            server_url = "http://localhost:8000/ai-models/"
+
+            can_model_process_images = can_process_images(title) or can_process_images(
+                model_description
+            )
+
+            request_data = {
+                "name": title,
+                "model": title,
+                "description": model_description,
+                "popularity": int(pull_count_number),
+                "can_process_image": str(can_model_process_images).lower(),
+                "parameters": parameters,
+                "size": size,
+            }
+
+            response = requests.post(
+                server_url,
+                json=request_data,
+                headers={"Content-Type": "application/json"},
+            )
+
+            if response.status_code == 201:
+                print(f"Model {title} added successfully")
+            elif response.status_code == 200:
+                print(f"Model {title} updated successfully")
+            else:
+                print(f"Model {title} failed to add")
+
+    return True
 
 
 if __name__ == "__main__":
-    scrape_ollama()
+    program_parameters = sys.argv
+
+    min_pull_count = 200_000
+
+    if len(program_parameters) > 1:
+        min_pull_count = int(program_parameters[1])
+
+    scrape_ollama(min_pull_count)

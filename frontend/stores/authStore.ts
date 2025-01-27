@@ -1,5 +1,4 @@
 import { jwtDecode } from 'jwt-decode'
-import { useSnackbarStore } from './snackbarStore'
 
 export const useAuthStore = defineStore('auth', () => {
   const isAuthorized = ref(false)

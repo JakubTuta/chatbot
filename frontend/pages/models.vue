@@ -7,11 +7,11 @@ const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
 
 const chatStore = useChatStore()
-const { aiModels } = storeToRefs(chatStore)
+const { aiModels, loading } = storeToRefs(chatStore)
 
 const snackbarStore = useSnackbarStore()
 
-const loading = ref(false)
+const isOpenPullModelsDialog = ref(false)
 const search = ref('')
 const sort = ref('popularityDecreasing')
 const filter = ref('all')
@@ -42,9 +42,7 @@ onMounted(async () => {
 
   containerStore.getUserContainers()
 
-  loading.value = true
   await chatStore.fetchAIModels()
-  loading.value = false
 })
 
 const preparedAIModels = computed(() => {
@@ -375,23 +373,44 @@ function addCanProcessImagesToQuery(value: boolean | null) {
   else
     router.push({ query: { ...router.currentRoute.value.query, canProcessImages: undefined } })
 }
+
+function openPullModelsDialog() {
+  if (loading.value)
+    return
+
+  isOpenPullModelsDialog.value = true
+}
 </script>
 
 <template>
   <v-container>
-    <v-btn
-      class="mb-3 mr-4"
-      @click="() => router.push('/')"
+    <div
+      style="display: flex; justify-content: space-between; align-items: center;"
+      class="mx-2 mb-4"
     >
-      Go to main page
-    </v-btn>
+      <div>
+        <v-btn
+          class="mr-4"
+          @click="() => router.push('/')"
+        >
+          Go to main page
+        </v-btn>
 
-    <v-btn
-      class="mb-3"
-      @click="() => router.push('/chat')"
-    >
-      Go to chat page
-    </v-btn>
+        <v-btn
+          @click="() => router.push('/chat')"
+        >
+          Go to chat page
+        </v-btn>
+      </div>
+
+      <v-btn @click="openPullModelsDialog">
+        {{ loading
+          ? "Pulling models. Please wait..."
+          : aiModels.length
+            ? 'Update models'
+            : 'Pull models' }}
+      </v-btn>
+    </div>
 
     <v-card :loading="loading">
       <v-card-title>
@@ -685,4 +704,6 @@ function addCanProcessImagesToQuery(value: boolean | null) {
       </v-card-text>
     </v-card>
   </v-container>
+
+  <PullModelsDialog v-model:is-show="isOpenPullModelsDialog" />
 </template>

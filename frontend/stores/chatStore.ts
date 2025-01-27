@@ -21,6 +21,7 @@ export const useChatStore = defineStore('chat', () => {
   const allChats = ref<{ [model: string]: { id: string, title: string }[] }>({})
 
   const sendingMessage = ref(false)
+  const loading = ref(false)
 
   const apiStore = useApiStore()
   const authStore = useAuthStore()
@@ -87,12 +88,34 @@ export const useChatStore = defineStore('chat', () => {
   const fetchAIModels = async () => {
     const url = 'ai-models/'
 
+    loading.value = true
+
     // const response = await getRequest(url, {})
     const response = await api.value.get(url)
 
     if (response?.status === 200) {
       aiModels.value = response.data
     }
+
+    loading.value = false
+  }
+
+  const pullAIModels = async (minPullCount: number) => {
+    const url = `ai-models/?minPullCount=${minPullCount}`
+
+    loading.value = true
+
+    try {
+      const response = await api.value.put(url)
+
+      if (response.status === 200)
+        await fetchAIModels()
+    }
+    catch (error: any) {
+      console.error(error)
+    }
+
+    loading.value = false
   }
 
   const fetchAllChats = async (model: string) => {
@@ -232,8 +255,10 @@ export const useChatStore = defineStore('chat', () => {
     chatHistoryPerModel,
     allChats,
     sendingMessage,
+    loading,
     resetState,
     fetchAIModels,
+    pullAIModels,
     fetchAllChats,
     fetchChatHistory,
     askBot,

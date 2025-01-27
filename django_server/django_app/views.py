@@ -22,11 +22,6 @@ class AIModels(APIView):
             "-popularity"
         )
 
-        if len(all_models) == 0:
-            scrape_ollama.scrape_ollama()
-
-            all_models = models.AIModel.objects.all().order_by("-popularity")
-
         deserialized_models = []
 
         for model in all_models:
@@ -43,6 +38,29 @@ class AIModels(APIView):
             deserialized_models.append(final_model)
 
         return Response(deserialized_models, status=status.HTTP_200_OK)
+
+    def put(self, request) -> Response:
+        # url: /ai-models/
+
+        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all()
+
+        for model in all_models:
+            model.delete()
+
+        min_pull_count = int(request.query_params.get("minPullCount", 200_000))
+
+        response = scrape_ollama.scrape_ollama(min_pull_count)
+
+        if not response:
+            return Response(
+                {"Error": "Failed to pull new models from ollama"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {"Status": "Pulled new models from ollama"},
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request) -> Response:
         # url: /ai-models/
