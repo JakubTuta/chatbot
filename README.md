@@ -26,7 +26,7 @@
 ## Running app with docker
 #### 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/chatbot.git
+git clone https://github.com/JakubTuta/chatbot.git
 
 cd chatbot
 ```
@@ -66,16 +66,11 @@ Install the modules:
 pip install -r requirements.txt
 ```
 
+Make sure the mongodb database is running on `http://localhost:27017` \
 ONLY FOR THE FIRST TIME:
 
 ```bash
 python replace_context.py
-```
-
-ONLY FOR THE FIRST TIME \
-Make sure the mongodb database is running on `http://localhost:27017`
-
-```bash
 python manage.py migrate
 ```
 
