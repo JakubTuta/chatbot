@@ -95,31 +95,13 @@ cd frontend
 Install the dependencies:
 
 ```bash
-# npm
+# replace npm with any package manager
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
 Start the development server on `http://localhost:3000`:
 
 ```bash
-# npm
+# # replace npm with any package manager
 npm run dev
-
-# pnpm
-pnpm run dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
