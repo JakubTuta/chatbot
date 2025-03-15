@@ -45,8 +45,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      isDocker: process.env.DOCKER === 'true',
-      serverUrl: process.env.DOCKER === 'true'
+      serverUrl: process.env.SERVER_URL || process.env.DOCKER === 'true'
         ? 'http://host.docker.internal:8000'
         : 'http://localhost:8000',
     },
