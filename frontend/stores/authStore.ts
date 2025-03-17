@@ -1,3 +1,4 @@
+import type { AxiosError } from 'axios'
 import { jwtDecode } from 'jwt-decode'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -51,7 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
         password,
       })
 
-      if (response.status === 200) {
+      if (apiStore.isResponseOk(response)) {
         snackbarStore.showSnackbarSuccess('User logged in!')
 
         localStorage.setItem(ACCESS_TOKEN, response.data.token?.access || '')
@@ -62,9 +63,9 @@ export const useAuthStore = defineStore('auth', () => {
           router.push('/chat')
       }
     }
-    catch (error) {
-      snackbarStore.showSnackbarError('Error logging in!')
-
+    // @ts-expect-error error type
+    catch (error: AxiosError) {
+      snackbarStore.showSnackbarError(error.response?.data?.erorr || 'Error logging in!')
       console.error(error)
     }
     finally {
@@ -85,7 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
         password,
       })
 
-      if (response.status === 201) {
+      if (apiStore.isResponseOk(response)) {
         snackbarStore.showSnackbarSuccess('User created successfully!')
 
         localStorage.setItem(ACCESS_TOKEN, response.data.token.access)
@@ -96,8 +97,9 @@ export const useAuthStore = defineStore('auth', () => {
           router.push('/chat')
       }
     }
-    catch (error) {
-      snackbarStore.showSnackbarError('Error creating user!')
+    // @ts-expect-error error type
+    catch (error: AxiosError) {
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Error creating user!')
       console.error(error)
     }
     finally {

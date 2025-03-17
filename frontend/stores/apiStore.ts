@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosResponse } from 'axios'
 
 export const useApiStore = defineStore('api', () => {
   const runtimeConfig = useRuntimeConfig()
@@ -20,7 +20,12 @@ export const useApiStore = defineStore('api', () => {
     return Promise.reject(error)
   })
 
+  const isResponseOk = (response: AxiosResponse | null) => {
+    return response !== null && response.status >= 200 && response.status < 300
+  }
+
   return {
     api,
+    isResponseOk,
   }
 })

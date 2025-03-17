@@ -10,14 +10,6 @@ from django.http import QueryDict
 from . import models, serializers
 
 
-def check_required_fields(
-    data: dict[str, str] | QueryDict, required_fields: list[str]
-) -> list[str]:
-    missing_fields = [field for field in required_fields if field not in data]
-
-    return missing_fields
-
-
 def map_history(history: list[dict[str, str]]) -> list[dict[str, str | list[str]]]:
     return [
         {

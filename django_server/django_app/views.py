@@ -2,6 +2,7 @@ import typing
 
 from django.contrib.auth.models import User
 from django.db.models.manager import BaseManager
+from helpers import decorators
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -62,10 +63,8 @@ class AIModels(APIView):
             status=status.HTTP_200_OK,
         )
 
-    def post(self, request) -> Response:
-        # url: /ai-models/
-
-        required_fields: list[str] = [
+    @decorators.required_body_params(
+        [
             "name",
             "model",
             "description",
@@ -74,13 +73,9 @@ class AIModels(APIView):
             "parameters",
             "size",
         ]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields
-        ):
-            return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    )
+    def post(self, request) -> Response:
+        # url: /ai-models/
 
         if request.data["can_process_image"] not in ["true", "false"]:
             return Response(
@@ -274,17 +269,9 @@ class AllChats(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+    @decorators.required_body_params(["chat_id"])
     def delete(self, request, model) -> Response:
         # url: /all-chats/{model}
-
-        required_fields: list[str] = ["chat_id"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields
-        ):
-            return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
@@ -312,17 +299,9 @@ class AllChats(APIView):
             status=status.HTTP_200_OK,
         )
 
+    @decorators.required_body_params(["id", "title"])
     def put(self, request, model) -> Response:
         # url: /all-chats/{model}
-
-        required_fields: list[str] = ["id", "title"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields
-        ):
-            return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
@@ -357,23 +336,10 @@ class AskBot(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @decorators.required_query_params(["parameters"])
+    @decorators.required_body_params(["message"])
     def post(self, request, model, chat_id) -> Response:
         # url: /ask-bot/{model}/{chat_id}?parameters={parameters}
-
-        required_fields: list[str] = ["message"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields
-        ):
-            return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not (model_parameters := request.query_params.get("parameters")):
-            return Response(
-                {"Error": "Missing parameters"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
@@ -394,6 +360,8 @@ class AskBot(APIView):
 
         user_question: str = request.data["message"]
         image: str = request.data.get("image", "")
+        model_parameters = request.query_params["parameters"]
+
         if (
             bot_response := functions.ask_bot(
                 model,
