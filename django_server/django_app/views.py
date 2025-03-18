@@ -1,10 +1,8 @@
-import typing
-
 from django.contrib.auth.models import User
-from django.db.models.manager import BaseManager
 from helpers import decorators
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -13,46 +11,33 @@ from . import functions, models, scrape_ollama, serializers
 
 
 class AIModels(APIView):
+    # url: /ai-models/
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    def get(self, request) -> Response:
-        # url: /ai-models/
-
-        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all().order_by(
-            "-popularity"
-        )
-
+    def get(self) -> Response:
+        all_models = models.AIModel.objects.all().order_by("-popularity")
         deserialized_models = []
 
         for model in all_models:
-            serializer = serializers.AIModelSerializer(model)
-
-            versions = []
-            for version in model.versions:
-                version_serializer = serializers.AIModelVersionSerializer(version)
-                versions.append(version_serializer.data)
-
-            final_model = serializer.data
-            final_model["versions"] = versions  # type: ignore
-
-            deserialized_models.append(final_model)
+            model_data = serializers.AIModelSerializer(model).data
+            model_data["versions"] = [
+                serializers.AIModelVersionSerializer(version).data
+                for version in model.versions
+            ]
+            deserialized_models.append(model_data)
 
         return Response(deserialized_models, status=status.HTTP_200_OK)
 
-    def put(self, request) -> Response:
-        # url: /ai-models/
-
-        all_models: BaseManager[models.AIModel] = models.AIModel.objects.all()
-
-        for model in all_models:
-            model.delete()
+    @decorators.required_query_params(["minPullCount"])
+    def put(self, request: Request) -> Response:
+        models.AIModel.objects.all().delete()
 
         min_pull_count = int(request.query_params.get("minPullCount", 200_000))
+        success = scrape_ollama.scrape_ollama(min_pull_count)
 
-        response = scrape_ollama.scrape_ollama(min_pull_count)
-
-        if not response:
+        if not success:
             return Response(
                 {"Error": "Failed to pull new models from ollama"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -74,10 +59,9 @@ class AIModels(APIView):
             "size",
         ]
     )
-    def post(self, request) -> Response:
-        # url: /ai-models/
-
-        if request.data["can_process_image"] not in ["true", "false"]:
+    def post(self, request: Request) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
+        if request_data["can_process_image"] not in ["true", "false"]:
             return Response(
                 {
                     "Error": "Invalid value for 'can_process_image', must be 'true' or 'false'"
@@ -85,35 +69,32 @@ class AIModels(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        found_model: models.AIModel | None = models.AIModel.objects.filter(
-            model=request.data["model"]
-        ).first()
+        version_data = {
+            "parameters": request_data["parameters"],
+            "size": request_data["size"],
+        }
+        version_serializer = serializers.AIModelVersionSerializer(data=version_data)
+
+        if not version_serializer.is_valid():
+            return Response(
+                {"Error": "Invalid version data"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        found_model = models.AIModel.objects.filter(model=request_data["model"]).first()
 
         if found_model:
             if functions.get_version_by_parameters(
-                found_model, request.data["parameters"]
+                found_model, version_data["parameters"]
             ):
                 return Response(
                     {"Error": "Version already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            new_version_data = {
-                "parameters": request.data["parameters"],
-                "size": request.data["size"],
-            }
-            new_version_serializer = serializers.AIModelVersionSerializer(
-                data=new_version_data
+            version_instance = models.AIModelVersion(
+                **version_serializer.validated_data  # type: ignore
             )
-
-            if not new_version_serializer.is_valid():
-                return Response(
-                    {"Error": "Invalid version data"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            version_instance = models.AIModelVersion(**new_version_serializer.validated_data)  # type: ignore
-
             found_model.versions.append(version_instance)
             found_model.save()
 
@@ -121,68 +102,48 @@ class AIModels(APIView):
                 {
                     "Status": "Model updated",
                     "model": found_model.model,
-                    "version": {
-                        "parameters": new_version_data["parameters"],
-                        "size": new_version_data["size"],
-                    },
+                    "version": version_data,
                 },
                 status=status.HTTP_200_OK,
             )
 
-        new_version_data = {
-            "parameters": request.data["parameters"],
-            "size": request.data["size"],
+        version_instance = models.AIModelVersion(**version_serializer.validated_data)  # type: ignore
+        model_data = {
+            "name": request_data["name"],
+            "model": request_data["model"],
+            "description": request_data["description"],
+            "popularity": request_data["popularity"],
+            "versions": [version_instance],
+            "can_process_image": request_data["can_process_image"] == "true",
         }
-        new_version_serializer = serializers.AIModelVersionSerializer(
-            data=new_version_data
-        )
 
-        if not new_version_serializer.is_valid():
-            return Response(
-                {"Error": "Invalid version data"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        model_serializer = serializers.AIModelSerializer(data=model_data)
 
-        new_version_instance = models.AIModelVersion(**new_version_serializer.validated_data)  # type: ignore
-
-        new_model_data = {
-            "name": request.data["name"],
-            "model": request.data["model"],
-            "description": request.data["description"],
-            "popularity": request.data["popularity"],
-            "versions": [new_version_instance],
-            "can_process_image": request.data["can_process_image"] == "true",
-        }
-        new_model_serializer = serializers.AIModelSerializer(data=new_model_data)
-
-        if not new_model_serializer.is_valid():
+        if not model_serializer.is_valid():
             return Response(
                 {"Error": "Invalid model data"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        new_model_serializer.save()
+        model_serializer.save()
 
         return Response(
             {
                 "Status": "New model created",
-                "model": new_model_data["model"],
-                "version": {
-                    "parameters": new_version_data["parameters"],
-                    "size": new_version_data["size"],
-                },
+                "model": model_data["model"],
+                "version": version_data,
             },
             status=status.HTTP_201_CREATED,
         )
 
 
 class ChatHistory(APIView):
+    # url: /chat-history/{model}
+
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, model, chat_id) -> Response:
-        # url: /chat-history/{model}
-
+    def get(self, request: Request, model: str, chat_id: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {"Error": "AI model not found"},
@@ -201,197 +162,185 @@ class ChatHistory(APIView):
 
 
 class AllChats(APIView):
+    # url: /all-chats/{model}
+
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, model) -> Response:
-        # url: /all-chats/{model}
-
+    def get(self, request: Request, model: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
-                {"Error": "AI model not found"},
+                {
+                    "Error": "AI model not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        user: User = request.user
-        chat_histories: BaseManager[models.ChatHistory] = functions.get_chats_for_user(
-            user, ai_model, sort=True
-        )
-
+        chat_histories = functions.get_chats_for_user(request.user, ai_model, sort=True)
         serializer = serializers.ChatHistorySerializer(chat_histories, many=True)
 
-        response_data = list(
-            map(
-                lambda chat_history: {
-                    "id": chat_history["id"],
-                    "title": chat_history["title"],
-                },
-                serializer.data,
-            )
+        response_data = [
+            {"id": chat["id"], "title": chat["title"]} for chat in serializer.data
+        ]
+
+        return Response(
+            response_data,
+            status=status.HTTP_200_OK,
         )
 
-        return Response(response_data, status=status.HTTP_200_OK)
-
-    def post(self, request, model) -> Response:
-        # url: /all-chats/{model}
-
+    def post(self, request: Request, model: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
-                {"Error": "AI model not found"},
+                {
+                    "Error": "AI model not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        user: User = request.user
+        serializer = serializers.ChatHistorySerializer(
+            data=request.data, ai_model=ai_model
+        )
 
-        chat_history_data: dict[str, typing.Any] = {
-            "user": user,
-            "ai_model": ai_model,
-            "history": [],
-        }
-
-        try:
-            chat_history: models.ChatHistory = models.ChatHistory.objects.create(
-                **chat_history_data
-            )
-            chat_history.save()
-        except Exception as e:
+        if not serializer.is_valid():
             return Response(
-                {"Error": f"Failed to create new chat: {str(e)}"},
+                {
+                    "Error": "Invalid chat data",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(
-            {
-                "Status": "New chat created",
-                "id": chat_history.id,  # type: ignore
-                "title": "New chat",
-            },
+            serializer.data,
             status=status.HTTP_201_CREATED,
         )
 
     @decorators.required_body_params(["chat_id"])
-    def delete(self, request, model) -> Response:
-        # url: /all-chats/{model}
+    def delete(self, request: Request, model: str) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
 
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
-                {"Error": "AI model not found"},
+                {
+                    "Error": "AI model not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        user: User = request.user
-        chat_id = request.data["chat_id"]
-
-        chat_histories: models.ChatHistory | None = functions.get_chat_history_for_user(
-            user, ai_model, chat_id
+        chat_history = functions.get_chat_history_for_user(
+            request.user, ai_model, request_data["chat_id"]
         )
 
-        if chat_histories is None:
+        if not chat_history:
             return Response(
-                {"Error": "Chat not found"},
+                {
+                    "Error": "Chat not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        chat_histories.delete()
-
+        chat_history.delete()
         return Response(
-            {"Status": "Chat deleted"},
+            {
+                "Status": "Chat deleted",
+            },
             status=status.HTTP_200_OK,
         )
 
     @decorators.required_body_params(["id", "title"])
-    def put(self, request, model) -> Response:
-        # url: /all-chats/{model}
+    def put(self, request: Request, model: str) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
 
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
-                {"Error": "AI model not found"},
+                {
+                    "Error": "AI model not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        user: User = request.user
-        chat_id = request.data["id"]
-        title = request.data["title"]
-
-        chat_histories: models.ChatHistory | None = functions.get_chat_history_for_user(
-            user, ai_model, chat_id
-        )
-
-        if chat_histories is None:
+        if (
+            chat_history := functions.get_chat_history_for_user(
+                request.user, ai_model, request_data["id"]
+            )
+        ) is None:
             return Response(
-                {"Error": "Chat not found"},
+                {
+                    "Error": "Chat not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        chat_histories.title = title
-        chat_histories.save()
+        chat_history.title = request_data["title"]
+        chat_history.save()
 
         return Response(
-            {"Status": "Chat title updated"},
+            {
+                "Status": "Chat title updated",
+            },
             status=status.HTTP_200_OK,
         )
 
 
 class AskBot(APIView):
+    # url: /ask-bot/{model}/{chat_id}?parameters={parameters}
+
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     @decorators.required_query_params(["parameters"])
     @decorators.required_body_params(["message"])
-    def post(self, request, model, chat_id) -> Response:
-        # url: /ask-bot/{model}/{chat_id}?parameters={parameters}
+    def post(self, request: Request, model: str, chat_id: str) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
 
-        if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
+        ai_model = models.AIModel.objects.filter(model=model).first()
+        if not ai_model:
             return Response(
-                {"Error": "AI model not found"},
+                {
+                    "Error": "AI model not found",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        user: User = request.user
-        chat_history: models.ChatHistory | None = functions.get_chat_history_for_user(
-            user, ai_model, chat_id
-        )
-        chat_history_messages: list[models.Message] = (
+        user = request.user
+        chat_history = functions.get_chat_history_for_user(user, ai_model, chat_id)
+        history_messages = functions.deserialize_messages(
             chat_history.history if chat_history else []
         )
-        deserialized_chat_history_messages: list[dict[str, str]] = (
-            functions.deserialize_messages(chat_history_messages)
-        )
 
-        user_question: str = request.data["message"]
-        image: str = request.data.get("image", "")
+        user_question = request_data["message"]
+        image = request_data.get("image", "")
         model_parameters = request.query_params["parameters"]
 
-        if (
+        if not (
             bot_response := functions.ask_bot(
                 model,
                 model_parameters,
                 user_question,
                 image,
-                deserialized_chat_history_messages,
+                history_messages,
             )
-        ) is None:
+        ):
             return Response(
-                {"Error": "Failed to get response from bot"},
+                {
+                    "Error": "Failed to get response from bot",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            user_message: models.Message = functions.create_message(
-                "user", user_question, image
-            )
-            bot_message: models.Message = functions.create_message(
-                "assistant", bot_response
-            )
+            messages = [
+                functions.create_message("user", user_question, image),
+                functions.create_message("assistant", bot_response),
+            ]
+            functions.add_messages_to_history(user, ai_model, chat_history, messages)
+
         except Exception as e:
             return Response(
-                {"Error": f"Failed to create message: {str(e)}"},
+                {
+                    "Error": f"Failed to create message: {str(e)}",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        functions.add_messages_to_history(
-            user, ai_model, chat_history, [user_message, bot_message]
-        )
 
         return Response(
             {

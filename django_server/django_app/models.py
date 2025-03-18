@@ -10,6 +10,7 @@ class AIModelVersion(models.Model):
 
 
 class AIModel(models.Model):
+    id = models.ObjectIdField()
     name = models.TextField()
     model = models.TextField()
     description = models.TextField()
@@ -25,6 +26,7 @@ class Message(models.Model):
 
 
 class ChatHistory(models.Model):
+    id = models.ObjectIdField()
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     ai_model = models.ForeignKey(AIModel, on_delete=models.CASCADE)
     title = models.TextField(default="New chat")

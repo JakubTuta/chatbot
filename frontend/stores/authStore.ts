@@ -1,8 +1,10 @@
 import type { AxiosError } from 'axios'
 import { jwtDecode } from 'jwt-decode'
+import type { IUser } from '~/models/user'
+import { mapUser } from '~/models/user'
 
 export const useAuthStore = defineStore('auth', () => {
-  const isAuthorized = ref(false)
+  const user = ref<IUser | null>(null)
   const loading = ref(false)
 
   const router = useRouter()
@@ -18,18 +20,14 @@ export const useAuthStore = defineStore('auth', () => {
     chatStore.resetState()
     containerStore.resetState()
 
-    isAuthorized.value = false
+    user.value = null
     loading.value = false
-  }
-
-  const setIsAuth = (value: boolean) => {
-    isAuthorized.value = value
   }
 
   const clearAuth = () => {
     localStorage.removeItem(ACCESS_TOKEN)
     localStorage.removeItem(REFRESH_TOKEN)
-    setIsAuth(false)
+    user.value = null
   }
 
   const logOut = () => {
@@ -37,6 +35,16 @@ export const useAuthStore = defineStore('auth', () => {
     resetState()
 
     return router.push('/')
+  }
+
+  const getCurrentUser = async () => {
+    const url = '/auth/user/me/'
+
+    const response = await api.value.get(url)
+
+    if (apiStore.isResponseOk(response)) {
+      user.value = mapUser(response.data)
+    }
   }
 
   const login = async (username: string, password: string) => {
@@ -55,9 +63,11 @@ export const useAuthStore = defineStore('auth', () => {
       if (apiStore.isResponseOk(response)) {
         snackbarStore.showSnackbarSuccess('User logged in!')
 
-        localStorage.setItem(ACCESS_TOKEN, response.data.token?.access || '')
-        localStorage.setItem(REFRESH_TOKEN, response.data.token?.refresh || '')
-        setIsAuth(true)
+        user.value = mapUser(response.data.user)
+
+        const tokens = response.data.token
+        localStorage.setItem(ACCESS_TOKEN, tokens.access)
+        localStorage.setItem(REFRESH_TOKEN, tokens.refresh)
 
         if (router.currentRoute.value.path !== '/models')
           router.push('/chat')
@@ -89,9 +99,11 @@ export const useAuthStore = defineStore('auth', () => {
       if (apiStore.isResponseOk(response)) {
         snackbarStore.showSnackbarSuccess('User created successfully!')
 
-        localStorage.setItem(ACCESS_TOKEN, response.data.token.access)
-        localStorage.setItem(REFRESH_TOKEN, response.data.token.refresh)
-        setIsAuth(true)
+        user.value = mapUser(response.data.user)
+
+        const tokens = response.data.token
+        localStorage.setItem(ACCESS_TOKEN, tokens.access)
+        localStorage.setItem(REFRESH_TOKEN, tokens.refresh)
 
         if (router.currentRoute.value.path !== '/models')
           router.push('/chat')
@@ -117,15 +129,15 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (response.status === 200) {
         localStorage.setItem(ACCESS_TOKEN, response.data.access)
-        setIsAuth(true)
+        getCurrentUser()
       }
       else {
-        setIsAuth(false)
+        clearAuth()
       }
     }
     catch (error) {
       console.error(error)
-      setIsAuth(false)
+      clearAuth()
       logOut()
     }
   }
@@ -134,7 +146,7 @@ export const useAuthStore = defineStore('auth', () => {
     const token = localStorage.getItem(ACCESS_TOKEN)
 
     if (!token) {
-      setIsAuth(false)
+      clearAuth()
 
       return false
     }
@@ -147,24 +159,37 @@ export const useAuthStore = defineStore('auth', () => {
       await refreshToken()
     }
     else {
-      setIsAuth(true)
+      getCurrentUser()
     }
 
-    return isAuthorized.value
+    return user.value !== null
   }
 
-  onMounted(async () => {
-    if (await isTokenValid() && router.currentRoute.value.path !== '/models') {
+  const init = async () => {
+    if (user.value && router.currentRoute.value.path !== '/models') {
       router.push('/chat')
+
+      return
     }
-  })
+
+    await getCurrentUser()
+
+    if (!user.value)
+      await refreshToken()
+
+    if (user.value && router.currentRoute.value.path !== '/models')
+      router.push('/chat')
+  }
 
   return {
-    isAuthorized,
+    user,
     loading,
+    init,
+    getCurrentUser,
     login,
     register,
     logOut,
     isTokenValid,
+    refreshToken,
   }
 })
