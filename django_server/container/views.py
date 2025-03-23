@@ -123,9 +123,7 @@ class Container(APIView):
 
         docker_client = ContainerManager()
 
-        query_model_params: str | None = request.query_params.get("parameters", None)
-
-        if query_model_params is None:
+        if (query_model_params := request.query_params.get("parameters", None)) is None:
             return Response(
                 {"Status": "Invalid request"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -156,18 +154,20 @@ class Container(APIView):
                 {"Status": "Invalid model version"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        if container := docker_client.run_container(ai_model, ai_model_version):
+        if (
+            container := docker_client.run_container(ai_model, ai_model_version)
+        ) is None:
             return Response(
-                {
-                    "Status": "Container is running",
-                    "container": ContainerManager.map_container(container),
-                },
-                status=status.HTTP_200_OK,
+                {"Status": "Container not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         return Response(
-            {"Status": "Error running container"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            {
+                "Status": "Container is running",
+                "container": ContainerManager.map_container(container),
+            },
+            status=status.HTTP_200_OK,
         )
 
     def delete(self, request, model) -> Response:
@@ -175,8 +175,8 @@ class Container(APIView):
 
         docker_client = ContainerManager()
 
-        query_model_params: str | None = request.query_params.get("parameters", None)
-        query_method: str | None = request.query_params.get("method", None)
+        query_model_params = request.query_params.get("parameters", None)
+        query_method = request.query_params.get("method", None)
 
         if query_model_params is None or query_method is None:
             return Response(

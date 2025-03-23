@@ -16,10 +16,10 @@ class AIModels(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    def get(self) -> Response:
+    def get(self, request: Request) -> Response:
         all_models = models.AIModel.objects.all().order_by("-popularity")
-        deserialized_models = []
 
+        deserialized_models = []
         for model in all_models:
             model_data = serializers.AIModelSerializer(model).data
             model_data["versions"] = [
@@ -292,8 +292,7 @@ class AskBot(APIView):
     def post(self, request: Request, model: str, chat_id: str) -> Response:
         request_data: dict[str, str] = request.data  # type: ignore
 
-        ai_model = models.AIModel.objects.filter(model=model).first()
-        if not ai_model:
+        if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
                     "Error": "AI model not found",
@@ -313,7 +312,7 @@ class AskBot(APIView):
 
         if not (
             bot_response := functions.ask_bot(
-                model,
+                ai_model,
                 model_parameters,
                 user_question,
                 image,

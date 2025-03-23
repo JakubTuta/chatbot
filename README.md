@@ -86,7 +86,9 @@ DATABASE_USERNAME: Database username
 DATABASE_PASSWORD: Database password
 DATABASE_NAME: Database name
 DATABASE_PORT: Database port
-LOCAL_DATABASE_HOST: MongoDB url (for example hosted on docker)
+MONGO_CONTAINER_NAME: MongoDB container name (for example mongodb)
+LOCAL_DATABASE_HOST: MongoDB url (for example hosted on docker) (for communication between local and docker)
+DOCKER_DATABASE_HOST: MongoDB url (for example hosted on docker) (for communication between docker and docker)
 
 # Optional
 PRODUCTION_DATABASE_HOST: Production MongoDB url (for example hosted on mongodb atlas)

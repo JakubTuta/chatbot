@@ -5,7 +5,7 @@ import requests
 from container.ContainerManager import ContainerManager
 from django.contrib.auth.models import User
 from django.db.models.manager import BaseManager
-from django.http import QueryDict
+from langchain_ollama import ChatOllama
 
 from . import models, serializers
 
@@ -30,7 +30,7 @@ def map_history(history: list[dict[str, str]]) -> list[dict[str, str | list[str]
 
 
 def ask_bot(
-    model: str,
+    model: models.AIModel,
     parameters: str,
     message: str,
     image: str,
@@ -39,7 +39,7 @@ def ask_bot(
     container_manager = ContainerManager()
 
     if (
-        container_port := container_manager.get_container_port(model, parameters)
+        container_port := container_manager.get_container_port(model.model, parameters)
     ) is None:
         return None
 
@@ -55,9 +55,9 @@ def ask_bot(
         )[0]
 
         request_data = {
-            "model": f"{model}:{parameters}",
-            "messages": mapped_history + [new_message],
+            "model": f"{model.model}:{parameters}",
             "stream": False,
+            "messages": mapped_history + [new_message],
         }
 
         response = requests.post(
@@ -72,6 +72,44 @@ def ask_bot(
     except requests.exceptions.RequestException as e:
         print(e)
         return None
+
+
+def stream_bot_response(
+    model: models.AIModel,
+    parameters: str,
+    message: str,
+    image: str,
+    history: typing.List[typing.Dict[str, str]],
+) -> typing.Generator[str, None, None]:
+    container_manager = ContainerManager()
+
+    if (
+        container_port := container_manager.get_container_port(model.model, parameters)
+    ) is None:
+        return
+
+    is_docker = os.getenv("DOCKER", "false") == "true"
+    host_name = "host.docker.internal" if is_docker else "localhost"
+
+    try:
+        if image:
+            new_message = map_history(
+                [{"role": "user", "content": message, "image": image}]
+            )[0]
+        else:
+            new_message = map_history([{"role": "user", "content": message}])[0]
+
+        messages = map_history(history) + [new_message]
+        llm = ChatOllama(
+            model=f"{model.model}:{parameters}",
+            base_url=f"http://{host_name}:{container_port}",
+        )
+
+        for chunk in llm.stream(messages):
+            yield chunk.text()
+
+    except requests.exceptions.RequestException:
+        return
 
 
 def create_message(role: str, message: str, image: str = "") -> models.Message:
@@ -149,3 +187,13 @@ def get_version_by_parameters(
     return next(
         (version for version in versions if version.parameters == parameters), None
     )
+
+
+def get_ai_model(value: str) -> typing.Optional[models.AIModel]:
+    try:
+        ai_model = models.AIModel.objects.filter(model=value).first()
+
+        return ai_model
+
+    except models.AIModel.DoesNotExist:
+        return None

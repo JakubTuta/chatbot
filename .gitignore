@@ -31,3 +31,4 @@ test.*
 .env
 *praison*
 .vscode
+*lock.json
