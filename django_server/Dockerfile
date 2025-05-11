@@ -1,5 +1,5 @@
 # Use the official Python image from the Docker Hub
-FROM python:3.13.2-alpine
+FROM python:3.13.3-alpine
 
 # Set the working directory in the container
 WORKDIR /app
@@ -17,10 +17,10 @@ COPY . .
 RUN python replace_context.py
 
 # Set the environment variable
-ENV DOCKER "true"
+ENV DOCKER=true
 
 # Expose the port the application runs on
 EXPOSE 8000
 
 # Specify the command to run the application
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]

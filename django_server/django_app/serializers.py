@@ -26,6 +26,7 @@ class AIModelSerializer(serializers.ModelSerializer):
             "popularity",
             "can_process_image",
             "versions",
+            "index",
         ]
 
     def create(self, validated_data) -> models.AIModel:

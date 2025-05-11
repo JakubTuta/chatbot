@@ -1,4 +1,3 @@
-import type { AxiosError } from 'axios'
 import { jwtDecode } from 'jwt-decode'
 import type { IUser } from '~/models/user'
 import { mapUser } from '~/models/user'
@@ -75,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     // @ts-expect-error error type
     catch (error: AxiosError) {
-      snackbarStore.showSnackbarError(error.response?.data?.erorr || 'Error logging in!')
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Error logging in!')
       console.error(error)
     }
     finally {

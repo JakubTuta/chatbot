@@ -32,6 +32,7 @@ class AIModels(APIView):
 
     @decorators.required_query_params(["minPullCount"])
     def put(self, request: Request) -> Response:
+        print("Pulling new models from ollama")
         models.AIModel.objects.all().delete()
 
         min_pull_count = int(request.query_params.get("minPullCount", 200_000))
@@ -57,6 +58,7 @@ class AIModels(APIView):
             "can_process_image",
             "parameters",
             "size",
+            "index",
         ]
     )
     def post(self, request: Request) -> Response:
@@ -115,6 +117,7 @@ class AIModels(APIView):
             "popularity": request_data["popularity"],
             "versions": [version_instance],
             "can_process_image": request_data["can_process_image"] == "true",
+            "index": request_data["index"],
         }
 
         model_serializer = serializers.AIModelSerializer(data=model_data)

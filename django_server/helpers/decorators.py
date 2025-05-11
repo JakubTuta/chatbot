@@ -99,6 +99,7 @@ def required_body_params(required_params):
                     )
 
                 return view_func(*args, **kwargs)
+
             except AttributeError as e:
                 print(e)
                 return JsonResponse(

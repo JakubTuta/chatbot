@@ -29,7 +29,7 @@ class Login(APIView):
 
         if not functions.check_if_password_correct(user, password):
             return Response(
-                {"error": "Invalid password"},
+                {"error": "Incorrect password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

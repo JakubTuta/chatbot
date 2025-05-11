@@ -16,6 +16,7 @@ class AIModel(models.Model):
     popularity = models.IntegerField(default=0)
     can_process_image = models.BooleanField(default=False)
     versions = models.ArrayModelField(model_container=AIModelVersion)
+    index = models.IntegerField(default=0)
 
 
 class Message(models.Model):

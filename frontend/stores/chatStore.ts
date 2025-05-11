@@ -1,4 +1,5 @@
-import { type IAIModel, mapAIModel } from '~/models/aiModel'
+import type { IAIModel } from '~/models/aiModel'
+import { mapAIModel } from '~/models/aiModel'
 
 export const useChatStore = defineStore('chat', () => {
   const aiModels = ref<IAIModel[]>([])

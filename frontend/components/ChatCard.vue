@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useDisplay } from 'vuetify';
-import { type WebsocketMessage, type WebsocketResponse, getWebsocket } from '~/constants/websocket';
-import type { IContainer } from '~/models/container';
+import { useDisplay } from 'vuetify'
+import { type WebsocketMessage, type WebsocketResponse, getWebsocket } from '~/constants/websocket'
+import type { IContainer } from '~/models/container'
 
 const props = defineProps<{
   selectedChatId: string

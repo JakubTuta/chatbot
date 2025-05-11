@@ -54,6 +54,8 @@ def scrape_ollama(min_pull_count: int) -> bool:
     models = soup.find_all("h2")
     models.pop(0)
 
+    model_index = 1
+
     for model in models:
         title = model.get_text().strip()
 
@@ -93,6 +95,7 @@ def scrape_ollama(min_pull_count: int) -> bool:
                 "can_process_image": str(can_model_process_images).lower(),
                 "parameters": parameters,
                 "size": size,
+                "index": model_index,
             }
 
             response = requests.post(
@@ -107,6 +110,8 @@ def scrape_ollama(min_pull_count: int) -> bool:
                 print(f"Model {title} updated successfully")
             else:
                 print(f"Model {title} failed to add")
+
+        model_index += 1
 
     return True
 

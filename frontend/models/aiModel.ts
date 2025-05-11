@@ -6,6 +6,7 @@ export interface IAIModel {
   popularity: number
   can_process_image: boolean
   versions: { parameters: string, size: string }[]
+  index: number
 }
 
 export function mapAIModel(data: Partial<IAIModel>): IAIModel {
@@ -17,5 +18,6 @@ export function mapAIModel(data: Partial<IAIModel>): IAIModel {
     popularity: data.popularity || 0,
     can_process_image: data.can_process_image || false,
     versions: data.versions || [],
+    index: data.index || 0,
   }
 }
