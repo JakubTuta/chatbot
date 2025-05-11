@@ -34,7 +34,13 @@ def parse_number(number_str):
 
 
 def can_process_images(text):
-    key_words = ["image", "vision"]
+    key_words = [
+        "image",
+        "vision",
+        "multimodal",
+        "image generation",
+        "image processing",
+    ]
 
     return any(word in text for word in key_words)
 

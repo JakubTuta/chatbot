@@ -486,6 +486,16 @@ function openPullModelsDialog() {
               >
                 {{ formatNumber(aiModel.popularity) }}
               </v-chip>
+
+              <v-chip
+                v-if="aiModel.can_process_image"
+                class="mb-1 ml-2"
+                density="compact"
+                color="success"
+                append-icon="mdi-image"
+              >
+                Image
+              </v-chip>
             </v-list-item-title>
 
             <v-list-item-subtitle class="text-subtitle-1">
