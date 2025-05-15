@@ -201,16 +201,19 @@ class AllChats(APIView):
             )
 
         serializer = serializers.ChatHistorySerializer(
-            data=request.data, ai_model=ai_model
+            data=request.data, context={"ai_model": ai_model, "user": request.user}
         )
 
         if not serializer.is_valid():
             return Response(
                 {
                     "Error": "Invalid chat data",
+                    "details": serializer.errors,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        chat_history = serializer.save()
 
         return Response(
             serializer.data,

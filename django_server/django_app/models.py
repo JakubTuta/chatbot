@@ -30,6 +30,4 @@ class ChatHistory(models.Model):
     ai_model = models.ForeignKey(AIModel, on_delete=models.CASCADE)
     title = models.TextField(default="New chat")
     last_update_time = models.DateTimeField(auto_now=True)
-    history = models.ArrayModelField(
-        model_container=Message,
-    )
+    history = models.ArrayModelField(model_container=Message, default=list)
