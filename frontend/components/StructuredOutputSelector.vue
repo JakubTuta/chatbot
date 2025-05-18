@@ -2,7 +2,8 @@
 const format = defineModel<{
   field: string
   type: string
-  description: string
+  description?: string
+  arrayType?: string
 }[]>('format', { default: () => [], required: true })
 const isFormValid = defineModel<boolean>('isFormValid', { default: () => false, required: true })
 
@@ -17,7 +18,7 @@ const simpleTypes = [
 
 const possibleTypes = [
   ...simpleTypes,
-  // { value: 'array', title: 'Array' },
+  { value: 'array', title: 'Array' },
   // { value: 'object', title: 'Object' },
 ]
 
@@ -55,42 +56,67 @@ async function validate() {
             dense
             align-center
           >
-            <v-text-field
-              v-model="formatLine.field"
-              density="compact"
-              :rules="[requiredRule()]"
-              class="w-40%"
-              label="Field"
-            />
+            <v-col
+              cols="12"
+              sm="5"
+            >
+              <v-text-field
+                v-model="formatLine.field"
+                density="compact"
+                :rules="[requiredRule()]"
+                label="Field"
+              />
+            </v-col>
 
-            <v-select
-              v-model="formatLine.type"
-              class="mx-2 w-40%"
-              :items="possibleTypes"
-              density="compact"
-              :rules="[requiredRule()]"
-              label="Type"
-            />
+            <v-col
+              cols="12"
+              sm="5"
+            >
+              <v-select
+                v-model="formatLine.type"
+                :items="possibleTypes"
+                density="compact"
+                :rules="[requiredRule()]"
+                label="Type"
+              />
+            </v-col>
 
-            <v-btn
-              icon="mdi-delete"
-              color="error"
-              variant="text"
-              size="small"
-              class="w-10%"
-              @click="removeType(index)"
-            />
+            <v-col
+              cols="12"
+              sm="2"
+            >
+              <v-btn
+                icon="mdi-delete"
+                color="error"
+                variant="text"
+                size="small"
+                @click="removeType(index)"
+              />
+            </v-col>
 
-            <v-textarea
-              v-model="formatLine.description"
-              density="compact"
-              class="mt-3 max-w-90%"
-              label="Description"
-              variant="outlined"
-              rows="1"
-              auto-grow
-              hint="(Optional) Any additional information about the field that may help the model to best understand it."
-            />
+            <v-col
+              v-if="formatLine.type === 'array'"
+              cols="12"
+            >
+              <v-select
+                v-model="formatLine.arrayType"
+                :items="simpleTypes"
+                density="compact"
+                label="Array Type"
+              />
+            </v-col>
+
+            <v-col cols="12">
+              <v-textarea
+                v-model="formatLine.description"
+                density="compact"
+                label="Description"
+                variant="outlined"
+                rows="1"
+                auto-grow
+                hint="(Optional) Any additional information about the field that may help the model to best understand it."
+              />
+            </v-col>
 
             <v-divider
               v-if="index < format.length - 1"

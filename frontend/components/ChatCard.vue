@@ -314,7 +314,9 @@ async function handleImageUpload(event: any) {
 
 watch(waitingForResponse, (newValue) => {
   if (newValue) {
-    scrollToBottom()
+    nextTick(() => {
+      scrollToBottom()
+    })
   }
 })
 </script>

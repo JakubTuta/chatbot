@@ -49,6 +49,7 @@ class MessageSerializer(serializers.ModelSerializer):
 class ChatHistorySerializer(serializers.ModelSerializer):
     ai_model = AIModelSerializer(read_only=True)
     user = auth_serializers.UserSerializer(read_only=True)
+    history = serializers.ListField(default=[], required=False)
 
     class Meta:
         model = models.ChatHistory
@@ -65,9 +66,11 @@ class ChatHistorySerializer(serializers.ModelSerializer):
         ai_model = self.context.get("ai_model")
         user = self.context.get("user")
 
-        # Add the required foreign keys to validated_data
         validated_data["ai_model"] = ai_model
         validated_data["user"] = user
+
+        if "history" not in validated_data:
+            validated_data["history"] = []
 
         chat_history = models.ChatHistory.objects.create(**validated_data)
         return chat_history
