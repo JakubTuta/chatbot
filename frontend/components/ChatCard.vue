@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useDisplay } from 'vuetify'
-import { type WebsocketMessage, type WebsocketResponse, getWebsocket } from '~/constants/websocket'
-import type { IContainer } from '~/models/container'
+import { useDisplay } from 'vuetify';
+import { type WebsocketMessage, type WebsocketResponse, getWebsocket } from '~/constants/websocket';
+import type { IContainer } from '~/models/container';
 
 const props = defineProps<{
   selectedChatId: string
@@ -22,6 +22,10 @@ const botResponse = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const websocket = ref<WebSocketWrapper | null>(null)
 const scrollToMe = ref<HTMLDivElement | null>(null)
+const waitingForResponse = ref(false)
+const useStructuredOutput = ref(false)
+const structuredOutputFormat = ref([])
+const isFormValid = ref(false)
 
 const userMessageColor = '#168AFF'
 const botMessageColor = '#9F33FF'
@@ -29,7 +33,7 @@ const botMessageColor = '#9F33FF'
 const { height, mobile } = useDisplay()
 
 const chatStore = useChatStore()
-const { chatHistoryPerModel, sendingMessage, aiModels } = storeToRefs(chatStore)
+const { chatHistoryPerModel, aiModels } = storeToRefs(chatStore)
 
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
@@ -77,6 +81,8 @@ const userPulledModels = computed(() => {
     .filter(e => e !== null)
     .sort((a, b) => a.value.localeCompare(b.value))
 })
+
+const canUseStructuredOutput = computed(() => (isFormValid.value && structuredOutputFormat.value.length > 0))
 
 watch(userPulledModels, (newValue) => {
   if (newValue.length)
@@ -142,6 +148,7 @@ const websocketHandlers = {
   },
 
   onReceiveMessage: (message: WebsocketResponse) => {
+    waitingForResponse.value = false
     if (message.done) {
       chatHistoryPerModel.value[selectedModel.value!.model].push({
         role: 'assistant',
@@ -257,17 +264,23 @@ function sendQuestion() {
   if (!selectedModel.value || !message.value || !selectedChatId.value || !websocket.value)
     return
 
+  waitingForResponse.value = true
+
   const model = selectedModel.value.model
   const modelParameters = selectedModel.value.parameters
-
-  // chatStore.askBot(model, modelParameters, selectedChatId.value, message.value, image.value)
 
   const websocketMessage: WebsocketMessage = {
     message: message.value,
     ai_model: model,
     ai_model_parameters: modelParameters,
-    image: image.value,
   }
+
+  if (image.value)
+    websocketMessage.image = image.value
+
+  if (canUseStructuredOutput.value && useStructuredOutput.value)
+    websocketMessage.structured_output = structuredOutputFormat.value
+
   websocket.value.sendMessage(websocketMessage)
 
   message.value = ''
@@ -298,12 +311,18 @@ async function handleImageUpload(event: any) {
 
   scrollToBottom()
 }
+
+watch(waitingForResponse, (newValue) => {
+  if (newValue) {
+    scrollToBottom()
+  }
+})
 </script>
 
 <template>
   <v-card>
     <v-card-text>
-      <v-row>
+      <v-row class="justify-space-between flex">
         <v-col
           cols="12"
           sm="5"
@@ -331,6 +350,34 @@ async function handleImageUpload(event: any) {
 
             <template #no-data />
           </v-select>
+        </v-col>
+
+        <v-col
+          cols="12"
+          sm="5"
+          md="4"
+          class="flex"
+        >
+          <v-text-field label="Structured output">
+            <StructuredOutputSelector
+              v-model:format="structuredOutputFormat"
+              v-model:is-form-valid="isFormValid"
+            />
+
+            <v-tooltip
+              activator="parent"
+              location="top"
+            >
+              When enabled, AI model will return the message in the given JSON format.
+            </v-tooltip>
+          </v-text-field>
+
+          <v-switch
+            v-model="useStructuredOutput"
+            :disabled="!canUseStructuredOutput"
+            class="ml-4"
+            color="primary"
+          />
         </v-col>
       </v-row>
 
@@ -392,6 +439,7 @@ async function handleImageUpload(event: any) {
                           </span>
 
                           <v-btn
+                            variant="text"
                             size="x-small"
                             icon="mdi-content-copy"
                             @click="copyToClipboard(part.content)"
@@ -477,6 +525,20 @@ async function handleImageUpload(event: any) {
               </div>
             </v-list-item>
 
+            <v-list-item
+              v-if="waitingForResponse"
+              rounded="shaped"
+              :style="`display: flex; justify-content: flex-start; background-color: ${botMessageColor}`"
+              max-width="10%"
+              class="d-flex mt-4 justify-center px-4 py-2"
+            >
+              <v-progress-circular
+                indeterminate
+                color="primary"
+                size="24"
+              />
+            </v-list-item>
+
             <div ref="scrollToMe" />
           </v-list>
 
@@ -534,7 +596,7 @@ async function handleImageUpload(event: any) {
           variant="flat"
           class="ml-2 mt-1"
           icon
-          :loading="sendingMessage"
+          :disabled="waitingForResponse"
           @click="sendQuestion"
         >
           <v-icon

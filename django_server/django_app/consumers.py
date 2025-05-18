@@ -16,13 +16,13 @@ class ChatConsumer(WebsocketConsumer):
             self.close()
             return
 
-        async_to_sync(self.channel_layer.group_add)(
+        async_to_sync(self.channel_layer.group_add)(  # type: ignore
             self.room_group_name, self.channel_name
         )
         self.accept()
 
     def disconnect(self, code):
-        async_to_sync(self.channel_layer.group_discard)(
+        async_to_sync(self.channel_layer.group_discard)(  # type: ignore
             self.room_group_name, self.channel_name
         )
 
@@ -48,6 +48,7 @@ class ChatConsumer(WebsocketConsumer):
         ai_model_value = text_data_json.get("ai_model", "")
         ai_model_parameters = text_data_json.get("ai_model_parameters", "")
         image = text_data_json.get("image", "")
+        structured_output = text_data_json.get("structured_output", None)
 
         if (ai_model := functions.get_ai_model(ai_model_value)) is None:
             self.disconnect(1000)
@@ -66,11 +67,29 @@ class ChatConsumer(WebsocketConsumer):
         )
 
         full_response = ""
-        for chunks in functions.stream_bot_response(
-            ai_model, ai_model_parameters, user_prompt, image, history_messages
-        ):
-            full_response += chunks
-            self.send(text_data=json.dumps({"message": chunks, "done": False}))
+
+        if structured_output is None:
+            for chunks in functions.stream_bot_response(
+                ai_model,
+                ai_model_parameters,
+                user_prompt,
+                image,
+                history_messages,
+            ):
+                full_response += chunks
+                self.send(text_data=json.dumps({"message": chunks, "done": False}))
+
+        else:
+            for chunks in functions.stream_structured_bot_response(
+                ai_model,
+                ai_model_parameters,
+                user_prompt,
+                image,
+                history_messages,
+                structured_output,
+            ):
+                full_response += chunks
+                self.send(text_data=json.dumps({"message": chunks, "done": False}))
 
         try:
             messages = [

@@ -3,6 +3,10 @@ export interface WebsocketMessage {
   ai_model: string
   ai_model_parameters: string
   image?: string
+  structured_output?: {
+    field: string
+    type: string
+  }[]
 }
 
 export interface WebsocketResponse {

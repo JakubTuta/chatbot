@@ -48,6 +48,7 @@ export default defineNuxtPlugin((app) => {
       },
       VBtn: {
         variant: 'outlined',
+        rounded: 'xl',
       },
       VContainer: {
         style: 'max-width: 1200px',
