@@ -33,6 +33,75 @@ function removeType(index: number) {
 async function validate() {
   isFormValid.value = await isValid()
 }
+
+function downloadJSON() {
+  const filename = 'structured_output.json'
+  const jsonString = JSON.stringify(format.value, null, 2)
+
+  const blob = new Blob([jsonString], { type: 'application/json' })
+
+  const url = URL.createObjectURL(blob)
+
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+
+  document.body.appendChild(link)
+  link.click()
+
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function validateFormatItem(item: any): boolean {
+  if (!item.field || !item.type)
+    return false
+
+  const validTypes = possibleTypes.map(type => type.value)
+  if (!validTypes.includes(item.type))
+    return false
+
+  if (item.type === 'array') {
+    const validArrayTypes = simpleTypes.map(type => type.value)
+
+    return item.arrayType && validArrayTypes.includes(item.arrayType)
+  }
+
+  if (item.type !== 'array' && item.arrayType !== undefined)
+    delete item.arrayType
+
+  return true
+}
+
+function importJSON() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'application/json'
+
+  input.addEventListener('change', (event) => {
+    const file = (event.target as HTMLInputElement).files?.[0]
+    if (!file)
+      return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string)
+
+        const validData = json.filter(validateFormatItem)
+
+        format.value = validData
+        validate()
+      }
+      catch (error) {
+        console.error('Invalid JSON file:', error)
+      }
+    }
+    reader.readAsText(file)
+  })
+
+  input.click()
+}
 </script>
 
 <template>
@@ -44,11 +113,11 @@ async function validate() {
     <v-card
       width="500px"
     >
-      <v-form
-        ref="form"
-        validate-on="eager"
-      >
-        <v-card-text>
+      <v-card-text>
+        <v-form
+          ref="form"
+          validate-on="eager"
+        >
           <v-row
             v-for="(formatLine, index) in format"
             :key="index"
@@ -132,8 +201,31 @@ async function validate() {
               Add
             </v-btn>
           </div>
-        </v-card-text>
-      </v-form>
+        </v-form>
+      </v-card-text>
+
+      <v-card-actions>
+        <v-spacer />
+
+        <v-btn
+          color="primary"
+          append-icon="mdi-download"
+          variant="text"
+          @click="downloadJSON()"
+        >
+          Export JSON
+        </v-btn>
+
+        <v-btn
+          class="ml-2"
+          append-icon="mdi-upload"
+          color="secondary"
+          variant="text"
+          @click="importJSON()"
+        >
+          Import JSON
+        </v-btn>
+      </v-card-actions>
     </v-card>
   </v-menu>
 </template>
