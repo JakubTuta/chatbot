@@ -562,8 +562,9 @@ function openPullModelsDialog() {
                     v-for="(command, index) in createContainerCommand(aiModel)"
                     :key="index"
                     append-inner-icon="mdi-content-copy"
-                    readonly
+
                     auto-grow
+                    readonly
                     no-resize
                     rows="1"
                     :model-value="command"

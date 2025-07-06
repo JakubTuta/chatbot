@@ -26,6 +26,8 @@ const waitingForResponse = ref(false)
 const useStructuredOutput = ref(false)
 const structuredOutputFormat = ref([])
 const isFormValid = ref(false)
+const expandedThoughts = ref<Record<number, boolean>>({})
+const botThoughtsVisible = ref(false)
 
 const userMessageColor = '#168AFF'
 const botMessageColor = '#9F33FF'
@@ -185,36 +187,40 @@ function copyToClipboard(content: string) {
 }
 
 function splitMessage(message: string) {
-  const parts = []
+  let thoughts = ''
   let remainingMessage = message
 
-  // Process the message to find all code blocks
+  const thinkTagStart = remainingMessage.indexOf('<think>')
+  const thinkTagEnd = remainingMessage.indexOf('</think>')
+
+  if (thinkTagStart !== -1 && thinkTagEnd !== -1) {
+    thoughts = remainingMessage.substring(thinkTagStart + 7, thinkTagEnd).trim()
+    remainingMessage = remainingMessage.substring(0, thinkTagStart) + remainingMessage.substring(thinkTagEnd + 8)
+  }
+
+  const parts = []
   while (remainingMessage.length > 0) {
     const codeBlockStart = remainingMessage.indexOf('```')
 
-    // No code block found, all remaining is text
     if (codeBlockStart === -1) {
       if (remainingMessage) {
-        // Clean empty HTML tags
         const cleanedText = cleanEmptyHtmlTags(remainingMessage).trim()
-        parts.push({ title: 'text', content: cleanedText })
+        if (cleanedText)
+          parts.push({ title: 'text', content: cleanedText })
       }
       break
     }
 
-    // Add text before code block
     if (codeBlockStart > 0) {
       const textContent = remainingMessage.substring(0, codeBlockStart)
-      // Clean empty HTML tags
       const cleanedText = cleanEmptyHtmlTags(textContent).trim()
-      parts.push({ title: 'text', content: cleanedText })
+      if (cleanedText)
+        parts.push({ title: 'text', content: cleanedText })
     }
 
-    // Find closing code block
     const codeBlockEnd = remainingMessage.indexOf('```', codeBlockStart + 3)
 
     if (codeBlockEnd !== -1) {
-      // Complete code block with opening and closing ```
       const fullCodeBlock = remainingMessage.substring(codeBlockStart, codeBlockEnd + 3)
       const programmingLanguage = fullCodeBlock.match(/```(.*)\n/)?.[1] || ''
       const code = fullCodeBlock.replace(/```(.*)\n|```$/g, '')
@@ -223,7 +229,6 @@ function splitMessage(message: string) {
       remainingMessage = remainingMessage.substring(codeBlockEnd + 3)
     }
     else {
-      // Code block without closing ```
       const code = remainingMessage.substring(codeBlockStart + 3)
       const programmingLanguage = code.match(/^(.*)\n/)?.[1] || ''
       const codeContent = programmingLanguage
@@ -239,18 +244,15 @@ function splitMessage(message: string) {
     }
   }
 
-  return parts
+  return { thoughts, parts }
 }
 
 function cleanEmptyHtmlTags(text: string): string {
-  // Remove all <think></think> tags regardless of content
-  const result = text.replace(/<think>|<\/think>/gi, '')
-
   // Remove empty HTML tags
   const emptyTagRegex = /<([a-z0-9]+)(\s[^>]*)?>(\s*)<\/\1>/gi
 
   let previousText = ''
-  let currentText = result
+  let currentText = text
 
   while (previousText !== currentText) {
     previousText = currentText
@@ -258,6 +260,10 @@ function cleanEmptyHtmlTags(text: string): string {
   }
 
   return currentText
+}
+
+function toggleThoughts(index: number) {
+  expandedThoughts.value[index] = !expandedThoughts.value[index]
 }
 
 function sendQuestion() {
@@ -417,8 +423,27 @@ watch(waitingForResponse, (newValue) => {
                 class="px-4 py-2 text-align-start"
               >
                 <div v-if="chatMessage.role === 'assistant'">
+                  <v-btn
+                    v-if="splitMessage(chatMessage.content).thoughts"
+                    size="x-small"
+                    class="mb-2"
+                    @click="toggleThoughts(index)"
+                  >
+                    {{ expandedThoughts[index]
+                      ? 'Hide thoughts'
+                      : 'Show thoughts' }}
+                  </v-btn>
+
                   <div
-                    v-for="(part, partIndex) in splitMessage(chatMessage.content)"
+                    v-if="splitMessage(chatMessage.content).thoughts && expandedThoughts[index]"
+                    class="mb-2 font-italic"
+                    style="white-space: pre-wrap"
+                  >
+                    {{ splitMessage(chatMessage.content).thoughts }}
+                  </div>
+
+                  <div
+                    v-for="(part, partIndex) in splitMessage(chatMessage.content).parts"
                     :key="partIndex"
                   >
                     <div
@@ -486,43 +511,64 @@ watch(waitingForResponse, (newValue) => {
                 : '70%'"
               class="mt-4 px-4 py-2 text-align-start"
             >
-              <div
-                v-for="(part, partIndex) in splitMessage(botResponse)"
-                :key="partIndex"
-              >
-                <div
-                  v-if="part.title === 'text'"
-                  v-sanitize-html="part.content"
-                  style="white-space: pre-wrap"
-                />
-
-                <div
-                  v-else-if="part.title === 'code'"
-                  class="my-4"
+              <div>
+                <v-btn
+                  v-if="splitMessage(botResponse).thoughts"
+                  size="x-small"
+                  class="mb-2"
+                  @click="botThoughtsVisible = !botThoughtsVisible"
                 >
-                  <v-card>
-                    <v-card-title
-                      class="text-subtitle-2"
-                      style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
-                    >
-                      <span>
-                        {{ part.language }}
-                      </span>
+                  {{ botThoughtsVisible
+                    ? 'Hide thoughts'
+                    : 'Show thoughts' }}
+                </v-btn>
 
-                      <v-btn
-                        size="x-small"
-                        icon="mdi-content-copy"
-                        @click="copyToClipboard(part.content)"
-                      />
-                    </v-card-title>
+                <div
+                  v-if="splitMessage(botResponse).thoughts && botThoughtsVisible"
+                  class="mb-2 font-italic"
+                  style="white-space: pre-wrap"
+                >
+                  {{ splitMessage(botResponse).thoughts }}
+                </div>
 
-                    <v-card-text
-                      style="white-space: pre-wrap"
-                      class="mt-3"
-                    >
-                      {{ part.content }}
-                    </v-card-text>
-                  </v-card>
+                <div
+                  v-for="(part, partIndex) in splitMessage(botResponse).parts"
+                  :key="partIndex"
+                >
+                  <div
+                    v-if="part.title === 'text'"
+                    v-sanitize-html="part.content"
+                    style="white-space: pre-wrap"
+                  />
+
+                  <div
+                    v-else-if="part.title === 'code'"
+                    class="my-4"
+                  >
+                    <v-card>
+                      <v-card-title
+                        class="text-subtitle-2"
+                        style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
+                      >
+                        <span>
+                          {{ part.language }}
+                        </span>
+
+                        <v-btn
+                          size="x-small"
+                          icon="mdi-content-copy"
+                          @click="copyToClipboard(part.content)"
+                        />
+                      </v-card-title>
+
+                      <v-card-text
+                        style="white-space: pre-wrap"
+                        class="mt-3"
+                      >
+                        {{ part.content }}
+                      </v-card-text>
+                    </v-card>
+                  </div>
                 </div>
               </div>
             </v-list-item>

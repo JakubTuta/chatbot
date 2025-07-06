@@ -1,44 +1,44 @@
 import os
-import re
 import sys
+import importlib.util
 
-import dotenv
+try:
+    djongo_spec = importlib.util.find_spec('djongo')
+    if djongo_spec and djongo_spec.origin:
+        djongo_path = os.path.dirname(djongo_spec.origin)
+        filepath = os.path.join(djongo_path, 'models', 'fields.py')
+    else:
+        raise ImportError("djongo package not found.")
 
-dotenv.load_dotenv()
-
-IS_DOCKER = os.getenv("DOCKER", "false").lower() == "true"
-
-PYTHON_VERSION = "3.13"
-
-if IS_DOCKER:
-    # Get Python version from Dockerfile
-    dockerfile_path = os.path.join(os.path.dirname(__file__), "Dockerfile")
-    with open(dockerfile_path, "r") as dockerfile:
-        dockerfile_contents = dockerfile.read()
-
-    python_version_match = re.search(
-        r"python(\d+\.\d+)", dockerfile_contents, re.IGNORECASE
-    )
-    if python_version_match:
-        PYTHON_VERSION = python_version_match.group(1)
+except ImportError:
+    print("Djongo is not installed. Skipping patch.")
+    sys.exit(0)
+except Exception as e:
+    print(f"Could not find djongo path: {e}")
+    sys.exit(1)
 
 
-else:
-    # Get Python version from the current virtual environment
-    PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}"
-
-
-filepath = (
-    f"../usr/local/lib/python{PYTHON_VERSION}/site-packages/djongo/models/fields.py"
-)
+if not os.path.exists(filepath):
+    print(f"File to patch does not exist: {filepath}")
+    sys.exit(1)
 
 with open(filepath, "r") as file:
     file_contents = file.read()
+
+# Check if the patch is already applied
+if "def from_db_value(self, value, expression, connection, context=None):" in file_contents:
+    print("Patch already applied.")
+    sys.exit(0)
 
 file_contents = file_contents.replace(
     "def from_db_value(self, value, expression, connection, context):",
     "def from_db_value(self, value, expression, connection, context=None):",
 )
 
-with open(filepath, "w") as file:
-    file.write(file_contents)
+try:
+    with open(filepath, "w") as file:
+        file.write(file_contents)
+    print(f"Successfully patched {filepath}")
+except Exception as e:
+    print(f"Error writing to {filepath}: {e}")
+    sys.exit(1)

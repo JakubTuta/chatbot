@@ -1,35 +1,44 @@
-# Stage 1: Build Stage
-FROM node:22-slim AS builder
+# Build stage - use slim for build tools / Etap budowania - używamy slim dla narzędzi budowania
+FROM node:22.12.0-slim AS builder
 
-# Set working directory
+# Set working directory / Ustawienie katalogu roboczego
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Copy package files first for better layer caching / Kopiowanie plików package jako pierwsze dla lepszego cache warstw
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
+# Install all dependencies including dev dependencies / Instalacja wszystkich zależności włącznie z dev
+RUN npm install && \
+    npm cache clean --force
 
-# Copy the rest of the application code
+# Copy source code / Kopiowanie kodu źródłowego
 COPY . .
 
-# Build the application
+# Build the application / Budowanie aplikacji
 RUN npm run build
 
-# Stage 2: Production Stage
-FROM node:22-alpine
+# Production stage - use alpine for smaller size / Etap produkcyjny - używamy alpine dla mniejszego rozmiaru
+FROM node:22.12.0-alpine AS runner
 
-# Set working directory
+# Create non-root user for security / Tworzenie użytkownika non-root dla bezpieczeństwa
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001 -G nodejs
+
+# Set working directory / Ustawienie katalogu roboczego
 WORKDIR /app
 
-# Copy built assets from the build stage
-COPY --from=builder /app/.output ./.output
+# Copy built application with proper ownership / Kopiowanie zbudowanej aplikacji z właściwymi uprawnieniami
+COPY --from=builder --chown=nextjs:nodejs /app/.output ./.output
 
-# Set the environment variable
-ENV DOCKER=true
+# Set environment variable / Ustawienie zmiennej środowiskowej
+ENV DOCKER=true \
+    NODE_ENV=production
 
-# Expose the port
+# Switch to non-root user / Przełączenie na użytkownika non-root
+USER nextjs
+
+# Expose port / Udostępnienie portu
 EXPOSE 3000
 
-# Start the Nuxt app
+# Run the application / uruch aplikacji
 CMD ["node", ".output/server/index.mjs"]
