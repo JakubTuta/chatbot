@@ -32,3 +32,4 @@ test.*
 *praison*
 .vscode
 *lock.json
+migrations

@@ -1,5 +1,5 @@
-import { jwtDecode } from 'jwt-decode'
 import type { IUser } from '~/models/user'
+import { jwtDecode } from 'jwt-decode'
 import { mapUser } from '~/models/user'
 
 export const useAuthStore = defineStore('auth', () => {

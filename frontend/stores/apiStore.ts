@@ -1,4 +1,5 @@
-import axios, { type AxiosResponse } from 'axios'
+import type { AxiosResponse } from 'axios'
+import axios from 'axios'
 
 export const useApiStore = defineStore('api', () => {
   const runtimeConfig = useRuntimeConfig()

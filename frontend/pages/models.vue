@@ -465,6 +465,31 @@ function openPullModelsDialog() {
       </v-card-title>
 
       <v-card-text>
+        <v-row
+          v-if="!loading && !preparedAIModels.length"
+          class="mt-4"
+        >
+          <v-col
+            cols="12"
+            class="text-h5 text-center"
+          >
+            No AI models found. Please pull models.
+          </v-col>
+
+          <v-col
+            cols="12"
+            align="center"
+          >
+            <v-btn @click="openPullModelsDialog">
+              {{ loading
+                ? "Pulling models. Please wait..."
+                : aiModels.length
+                  ? 'Update models'
+                  : 'Pull models' }}
+            </v-btn>
+          </v-col>
+        </v-row>
+
         <v-list>
           <v-list-item
             v-for="aiModel in preparedAIModels"
