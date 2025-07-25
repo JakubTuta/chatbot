@@ -5,14 +5,6 @@ from django.http import QueryDict
 base_url = "http://localhost:8000"
 
 
-def check_required_fields(
-    data: dict[str, str] | QueryDict, required_fields: list[str]
-) -> list[str]:
-    missing_fields = [field for field in required_fields if field not in data]
-
-    return missing_fields
-
-
 def find_user(username: str) -> User | None:
     return User.objects.filter(username=username).first()
 

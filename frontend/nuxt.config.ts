@@ -16,7 +16,7 @@ export default defineNuxtConfig({
     '@vueuse/nuxt',
     '@unocss/nuxt',
     '@pinia/nuxt',
-    '@nuxtjs/color-mode',
+    '@radya/nuxt-dompurify',
     (_options, nuxt) => {
       nuxt.hooks.hook('vite:extendConfig', (config) => {
         // eslint-disable-next-line ts/ban-ts-comment
@@ -32,6 +32,8 @@ export default defineNuxtConfig({
       'stores/**',
       'constants/**',
       'utils/**',
+      'components/**',
+      'models/**',
     ],
   },
 
@@ -45,10 +47,9 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      isDocker: process.env.DOCKER === 'true',
-      serverUrl: process.env.DOCKER === 'true'
-        ? 'http://host.docker.internal:8000'
-        : 'http://localhost:8000',
+      serverUrl: process.env.SERVER_URL || process.env.DOCKER === 'true'
+        ? 'http://host.docker.internal:8000/'
+        : 'http://localhost:8000/',
     },
   },
 

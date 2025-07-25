@@ -1,42 +1,35 @@
 import typing
 
-from django.http import HttpRequest
+from helpers import decorators
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from . import functions, serializers
 
 
 class Login(APIView):
-    authentication_classes: list[typing.Any] = []
-    permission_classes: list[type[AllowAny]] = [AllowAny]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
-    def post(self, request: HttpRequest) -> Response:
-        # url: /auth/login/
-
-        required_fields: list[str] = ["username", "password"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields  # type: ignore
-        ):
-            return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        username: str = request.data["username"]  # type: ignore
-        password: str = request.data["password"]  # type: ignore
+    @decorators.required_body_params(["username", "password"])
+    def post(self, request: Request) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
+        username = request_data["username"]
+        password = request_data["password"]
 
         if (user := functions.find_user(username)) is None:
             return Response(
-                {"Error": "User not found"},
+                {"error": "Username not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         if not functions.check_if_password_correct(user, password):
             return Response(
-                {"Error": "Invalid password"},
+                {"error": "Incorrect password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -46,7 +39,6 @@ class Login(APIView):
 
         return Response(
             {
-                "Status": "Success",
                 "user": serializer.data,
                 "token": token,
             },
@@ -55,25 +47,22 @@ class Login(APIView):
 
 
 class Register(APIView):
-    authentication_classes: list[typing.Any] = []
-    permission_classes: list[type[AllowAny]] = [AllowAny]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
-    def post(self, request: HttpRequest) -> Response:
-        # url: /auth/register/
+    @decorators.required_body_params(["username", "password"])
+    def post(self, request: Request) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
+        username = request_data["username"]
+        password = request_data["password"]
 
-        required_fields: list[str] = ["username", "password"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields  # type: ignore
-        ):
+        if functions.find_user(username) is not None:
             return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
+                {"error": "Username already exists"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        username: str = request.data["username"]  # type: ignore
-        password: str = request.data["password"]  # type: ignore
-
-        serializer = serializers.UserSerializer(data=request.data)  # type: ignore
+        serializer = serializers.UserSerializer(data=request_data)
 
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -84,7 +73,6 @@ class Register(APIView):
 
         return Response(
             {
-                "Status": "Success",
                 "user": serializer.data,
                 "token": token,
             },
@@ -92,47 +80,58 @@ class Register(APIView):
         )
 
 
-class CheckAndRefreshToken(APIView):
-    authentication_classes: list[typing.Any] = []
-    permission_classes: list[type[AllowAny]] = [AllowAny]
+class UserMe(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request: HttpRequest) -> Response:
-        # url: /auth/token/check-and-refresh/
-
-        required_fields: list[str] = ["access", "refresh"]
-        if missing_fields := functions.check_required_fields(
-            request.data, required_fields  # type: ignore
-        ):
+    def get(self, request: Request) -> Response:
+        if (user := functions.find_user(request.user.username)) is None:
             return Response(
-                {"Error": f"Missing fields: {', '.join(missing_fields)}"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        access_token: str = request.data["access"]  # type: ignore
-        refresh_token: str = request.data["refresh"]  # type: ignore
+        serializer = serializers.UserSerializer(user)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CheckAndRefreshToken(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @decorators.required_body_params(["access", "refresh"])
+    def post(self, request: Request) -> Response:
+        request_data: dict[str, str] = request.data  # type: ignore
+        access_token = request_data["access"]
+        refresh_token = request_data["refresh"]
 
         if functions.verify_token(access_token):
             return Response(
                 {
-                    "Status": "Verified",
-                    "token": {"access": access_token, "refresh": refresh_token},
+                    "token": {
+                        "access": access_token,
+                        "refresh": refresh_token,
+                    },
                 },
                 status=status.HTTP_200_OK,
             )
 
         if (
-            functions.verify_token(refresh_token)
-            and (new_access_token := functions.refresh_token(refresh_token)) is not None
+            not functions.verify_token(refresh_token)
+            or (new_access_token := functions.refresh_token(refresh_token)) is None
         ):
             return Response(
-                {
-                    "Status": "Refreshed",
-                    "token": {"access": new_access_token, "refresh": refresh_token},
-                },
-                status=status.HTTP_200_OK,
+                {"error": "Invalid token"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(
-            {"Error": "Invalid token"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {
+                "token": {
+                    "access": new_access_token,
+                    "refresh": refresh_token,
+                },
+            },
+            status=status.HTTP_200_OK,
         )

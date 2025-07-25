@@ -28,3 +28,7 @@ venv
 # trash
 test.*
 *.http
+.env
+*praison*
+.vscode
+*lock.json

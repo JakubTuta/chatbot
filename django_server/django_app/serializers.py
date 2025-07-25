@@ -26,6 +26,7 @@ class AIModelSerializer(serializers.ModelSerializer):
             "popularity",
             "can_process_image",
             "versions",
+            "index",
         ]
 
     def create(self, validated_data) -> models.AIModel:
@@ -46,12 +47,13 @@ class MessageSerializer(serializers.ModelSerializer):
 
 
 class ChatHistorySerializer(serializers.ModelSerializer):
-    ai_model = AIModelSerializer()
-    user = auth_serializers.UserSerializer()
+    ai_model = AIModelSerializer(read_only=True)
+    user = auth_serializers.UserSerializer(read_only=True)
+    history = serializers.ListField(default=[], required=False)
 
     class Meta:
         model = models.ChatHistory
-        fields: list[str] = [
+        fields = [
             "id",
             "user",
             "ai_model",
@@ -60,7 +62,15 @@ class ChatHistorySerializer(serializers.ModelSerializer):
             "history",
         ]
 
-    def create(self, validated_data) -> models.ChatHistory:
-        chat_history = models.ChatHistory.objects.create(**validated_data)
+    def create(self, validated_data):
+        ai_model = self.context.get("ai_model")
+        user = self.context.get("user")
 
+        validated_data["ai_model"] = ai_model
+        validated_data["user"] = user
+
+        if "history" not in validated_data:
+            validated_data["history"] = []
+
+        chat_history = models.ChatHistory.objects.create(**validated_data)
         return chat_history

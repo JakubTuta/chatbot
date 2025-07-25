@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AIModel } from '~/stores/chatStore'
+import type { IAIModel } from '~/models/aiModel'
 
 const router = useRouter()
 
@@ -46,7 +46,7 @@ onMounted(async () => {
 })
 
 const preparedAIModels = computed(() => {
-  const searchFunction = (model: AIModel) => {
+  const searchFunction = (model: IAIModel) => {
     if (!search.value) {
       return true
     }
@@ -54,7 +54,7 @@ const preparedAIModels = computed(() => {
     return model.name.toLowerCase().includes(search.value.toLowerCase())
   }
 
-  const sortFunction = (a: AIModel, b: AIModel) => {
+  const sortFunction = (a: IAIModel, b: IAIModel) => {
     if (sort.value === 'popularityDecreasing') {
       return b.popularity - a.popularity
     }
@@ -101,7 +101,7 @@ const preparedAIModels = computed(() => {
     return true
   }
 
-  const canProcessImageFunction = (model: AIModel) => {
+  const canProcessImageFunction = (model: IAIModel) => {
     return canProcessImages.value
       ? model.can_process_image
       : true
@@ -176,7 +176,7 @@ function chipColor(value: number): string {
   }
 }
 
-function findContainer(aiModel: AIModel): string {
+function findContainer(aiModel: IAIModel): string {
   if (!selectedVersions.value[aiModel.model]) {
     return 'not_found'
   }
@@ -191,7 +191,7 @@ function findContainer(aiModel: AIModel): string {
   return container.status
 }
 
-function findContainerModelParameters(aiModel: AIModel, parameters: string): string {
+function findContainerModelParameters(aiModel: IAIModel, parameters: string): string {
   const containerName = `${aiModel.model}_${parameters}`
   const container = containers.value.find(container => container.name === containerName)
 
@@ -202,14 +202,14 @@ function findContainerModelParameters(aiModel: AIModel, parameters: string): str
   return container.status
 }
 
-function canCreateContainer(aiModel: AIModel): boolean {
+function canCreateContainer(aiModel: IAIModel): boolean {
   const containerStatus = findContainer(aiModel)
   const statuses = ['not_found']
 
   return statuses.includes(containerStatus)
 }
 
-function createContainer(aiModel: AIModel) {
+function createContainer(aiModel: IAIModel) {
   if (!selectedVersions.value[aiModel.model]) {
     return
   }
@@ -218,14 +218,14 @@ function createContainer(aiModel: AIModel) {
   snackbarStore.showSnackbarSuccess('Container is being created')
 }
 
-function createContainerCommand(aiModel: AIModel): string[] {
+function createContainerCommand(aiModel: IAIModel): string[] {
   if (!selectedVersions.value[aiModel.model]) {
     return []
   }
 
   const parameters = selectedVersions.value[aiModel.model]!.parameters
   const containerName = `${aiModel.model}_${parameters}`
-  const containerPort = 11434 + aiModel.id
+  const containerPort = 11434 + aiModel.index
 
   const createCommand = `docker run -d ${escapeCharacter.value}
   --name ${containerName} ${escapeCharacter.value}
@@ -242,14 +242,14 @@ function createContainerCommand(aiModel: AIModel): string[] {
   return [createCommand, pullModelCommand]
 }
 
-function canStartContainer(aiModel: AIModel): boolean {
+function canStartContainer(aiModel: IAIModel): boolean {
   const containerStatus = findContainer(aiModel)
   const statuses = ['exited', 'paused']
 
   return statuses.includes(containerStatus)
 }
 
-function startContainer(aiModel: AIModel) {
+function startContainer(aiModel: IAIModel) {
   if (!selectedVersions.value[aiModel.model]) {
     return
   }
@@ -258,7 +258,7 @@ function startContainer(aiModel: AIModel) {
   snackbarStore.showSnackbarSuccess('Starting container')
 }
 
-function startContainerCommand(aiModel: AIModel): string[] {
+function startContainerCommand(aiModel: IAIModel): string[] {
   if (!selectedVersions.value[aiModel.model]) {
     return []
   }
@@ -269,14 +269,14 @@ function startContainerCommand(aiModel: AIModel): string[] {
   return [`docker start ${containerName}`]
 }
 
-function canStopContainer(aiModel: AIModel): boolean {
+function canStopContainer(aiModel: IAIModel): boolean {
   const containerStatus = findContainer(aiModel)
   const statuses = ['running', 'paused', 'restarting', 'pulling_model']
 
   return statuses.includes(containerStatus)
 }
 
-function stopContainer(aiModel: AIModel) {
+function stopContainer(aiModel: IAIModel) {
   if (!selectedVersions.value[aiModel.model]) {
     return
   }
@@ -285,7 +285,7 @@ function stopContainer(aiModel: AIModel) {
   snackbarStore.showSnackbarSuccess('Stopping container')
 }
 
-function stopContainerCommand(aiModel: AIModel): string[] {
+function stopContainerCommand(aiModel: IAIModel): string[] {
   if (!selectedVersions.value[aiModel.model]) {
     return []
   }
@@ -296,14 +296,14 @@ function stopContainerCommand(aiModel: AIModel): string[] {
   return [`docker stop ${containerName}`]
 }
 
-function canRemoveContainer(aiModel: AIModel): boolean {
+function canRemoveContainer(aiModel: IAIModel): boolean {
   const containerStatus = findContainer(aiModel)
   const statuses = ['running', 'exited', 'paused', 'restarting', 'pulling_model']
 
   return statuses.includes(containerStatus)
 }
 
-function removeContainer(aiModel: AIModel) {
+function removeContainer(aiModel: IAIModel) {
   if (!selectedVersions.value[aiModel.model]) {
     return
   }
@@ -312,7 +312,7 @@ function removeContainer(aiModel: AIModel) {
   snackbarStore.showSnackbarSuccess('Removing container')
 }
 
-function removeContainerCommand(aiModel: AIModel): string[] {
+function removeContainerCommand(aiModel: IAIModel): string[] {
   if (!selectedVersions.value[aiModel.model]) {
     return []
   }
@@ -486,6 +486,16 @@ function openPullModelsDialog() {
               >
                 {{ formatNumber(aiModel.popularity) }}
               </v-chip>
+
+              <v-chip
+                v-if="aiModel.can_process_image"
+                class="mb-1 ml-2"
+                density="compact"
+                color="success"
+                append-icon="mdi-image"
+              >
+                Image
+              </v-chip>
             </v-list-item-title>
 
             <v-list-item-subtitle class="text-subtitle-1">
@@ -552,8 +562,9 @@ function openPullModelsDialog() {
                     v-for="(command, index) in createContainerCommand(aiModel)"
                     :key="index"
                     append-inner-icon="mdi-content-copy"
-                    readonly
+
                     auto-grow
+                    readonly
                     no-resize
                     rows="1"
                     :model-value="command"

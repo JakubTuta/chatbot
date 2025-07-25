@@ -1,5 +1,6 @@
 <script setup lang="ts">
-useAuthStore()
+const authStore = useAuthStore()
+authStore.init()
 </script>
 
 <template>

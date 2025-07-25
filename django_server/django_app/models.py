@@ -16,6 +16,7 @@ class AIModel(models.Model):
     popularity = models.IntegerField(default=0)
     can_process_image = models.BooleanField(default=False)
     versions = models.ArrayModelField(model_container=AIModelVersion)
+    index = models.IntegerField(default=0)
 
 
 class Message(models.Model):
@@ -29,6 +30,4 @@ class ChatHistory(models.Model):
     ai_model = models.ForeignKey(AIModel, on_delete=models.CASCADE)
     title = models.TextField(default="New chat")
     last_update_time = models.DateTimeField(auto_now=True)
-    history = models.ArrayModelField(
-        model_container=Message,
-    )
+    history = models.ArrayModelField(model_container=Message)

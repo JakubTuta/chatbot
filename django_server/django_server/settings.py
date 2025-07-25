@@ -17,13 +17,27 @@ from pathlib import Path
 
 import dotenv
 
-IS_DOCKER = os.getenv("DOCKER", "false") == "true"
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-dotenv_path = path.join(BASE_DIR, ".env")
-dotenv.load_dotenv(dotenv_path)
+
+def load_dotenv():
+    dotenv_path = path.join(BASE_DIR, ".env")
+    example_dotenv_path = path.join(BASE_DIR, ".env.example")
+
+    env_path = dotenv.find_dotenv(filename=dotenv_path, raise_error_if_not_found=True)
+    if not env_path:
+        env_path = dotenv.find_dotenv(
+            filename=example_dotenv_path, raise_error_if_not_found=True
+        )
+
+    if env_path:
+        dotenv.load_dotenv(env_path)
+
+    dotenv.load_dotenv(dotenv_path)
+
+
+load_dotenv()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -32,13 +46,13 @@ dotenv.load_dotenv(dotenv_path)
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "false") == "true"
+# DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-# CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWS_CREDENTIALS = DEBUG
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWS_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -54,25 +68,36 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": datetime.timedelta(weeks=1),
 }
 
-
 # Application definition
 
 INSTALLED_APPS = [
+    # Third-party apps
+    "corsheaders",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "channels",
+    "daphne",
+    # Django apps
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Third-party apps
-    "corsheaders",
-    "rest_framework",
-    "rest_framework_simplejwt",
     # My apps
     "django_app",
     "django_auth",
     "container",
 ]
+
+# Websocket
+ASGI_APPLICATION = "django_server.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -107,9 +132,21 @@ WSGI_APPLICATION = "django_server.wsgi.application"
 
 
 # Database
-DATABASE_HOST = (
-    os.getenv("DOCKER_DATABASE_HOST") if IS_DOCKER else os.getenv("LOCAL_DATABASE_HOST")
-)
+LOCAL_DATABASE_HOST = os.getenv("LOCAL_DATABASE_HOST")
+DOCKER_DATABASE_HOST = os.getenv("DOCKER_DATABASE_HOST")
+PRODUCTION_DATABASE_HOST = os.getenv("PRODUCTION_DATABASE_HOST")
+
+IS_PRODUCTION = os.getenv("IS_PRODUCTION", "false") == "true"
+IS_DOCKER = os.getenv("DOCKER", "false") == "true"
+
+if IS_PRODUCTION and PRODUCTION_DATABASE_HOST:
+    DATABASE_HOST = PRODUCTION_DATABASE_HOST
+elif IS_DOCKER and DOCKER_DATABASE_HOST:
+    DATABASE_HOST = DOCKER_DATABASE_HOST
+elif LOCAL_DATABASE_HOST:
+    DATABASE_HOST = LOCAL_DATABASE_HOST
+else:
+    exit("No database host specified")
 
 DATABASES = {
     "default": {

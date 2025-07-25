@@ -1,75 +1,25 @@
 <script setup lang="ts">
-import { useDisplay } from 'vuetify'
-
 definePageMeta({ middleware: ['auth'] })
 
-export interface ContainerModel {
-  name: string
-  value: string
-  model: string
-  status: string
-  parameters: string
-  canProcessImages: boolean
-}
-
 const loading = ref(false)
-const selectedModel = ref<ContainerModel | null>(null)
-const message = ref('')
-const selectedChatId = ref('')
 const isShowDrawer = ref(false)
 const temporaryChatTitle = ref('')
 const changingChatTitleId = ref('')
 const loadingChangeChatTitle = ref(false)
-const image = ref('')
-
-const userMessageColor = '#168AFF'
-const botMessageColor = '#9F33FF'
-
-const { height, mobile } = useDisplay()
-const router = useRouter()
+const selectedModel = ref<IContainer | null>(null)
+const selectedChatId = ref('')
+const forceReset = ref(false)
 
 const authStore = useAuthStore()
-const { isAuthorized } = storeToRefs(authStore)
+const { user } = storeToRefs(authStore)
 
 const chatStore = useChatStore()
-const { aiModels, chatHistoryPerModel, allChats, sendingMessage } = storeToRefs(chatStore)
+const { aiModels, allChats } = storeToRefs(chatStore)
 
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
 
-const userPulledModels = computed(() => {
-  if (!containers.value.length || !aiModels.value.length)
-    return []
-
-  return containers.value.map((container) => {
-    if (container.status === 'pulling_model')
-      return null
-
-    const containerModel = container.environment.model
-    const foundAIModel = aiModels.value.find(model => model.model === containerModel)
-
-    if (!foundAIModel)
-      return null
-
-    return {
-      name: foundAIModel.name,
-      value: `${foundAIModel.model} - ${container.environment.parameters}`,
-      model: containerModel,
-      status: container.status,
-      parameters: container.environment.parameters,
-      canProcessImages: foundAIModel.can_process_image,
-    } as ContainerModel
-  })
-    .filter(e => e !== null)
-    .sort((a, b) => a.value.localeCompare(b.value))
-})
-
-watch(userPulledModels, (newValue) => {
-  if (newValue.length)
-    selectedModel.value = newValue[0]
-})
-
-watch(isAuthorized, async (newValue) => {
+watch(user, async (newValue) => {
   if (!newValue)
     return
 
@@ -84,78 +34,39 @@ watch(isAuthorized, async (newValue) => {
   loading.value = false
 }, { immediate: true })
 
-watch(selectedModel, async (newModel, oldModel) => {
-  if (!newModel
-    || (newModel.model === (oldModel?.model || '')
-      && newModel.parameters === (oldModel?.parameters || ''))) {
-    return
-  }
-
-  loading.value = true
-  softReset()
-
-  containerStore.runContainer(newModel)
-
-  const chats = allChats.value[newModel.model] || []
-
-  if (!chats.length) {
-    await chatStore.fetchAllChats(newModel.model)
-
-    const updatedChats = allChats.value[newModel.model] || []
-
-    if (updatedChats.length)
-      selectedChatId.value = updatedChats[0].id
-    else
-      await createNewChat(newModel.model)
-  }
-
-  const newQueryParams = {
-    model: newModel.model,
-    parameters: newModel.parameters,
-    chatId: selectedChatId.value,
-  }
-  router.push({ query: newQueryParams })
-
-  loading.value = false
-}, { immediate: true })
-
 watch(selectedChatId, async (newChatId, oldChatId) => {
   if (!newChatId || !selectedModel.value || newChatId === oldChatId)
     return
 
   loading.value = true
-  softReset()
+  forceReset.value = true
 
   await chatStore.fetchChatHistory(selectedModel.value.model, newChatId)
-
-  router.push({ query: { ...router.currentRoute.value.query, chatId: newChatId } })
 
   loading.value = false
 }, { immediate: true })
 
+watch(allChats, (newValue) => {
+  if (!selectedModel.value || !newValue[selectedModel.value.model])
+    return
+
+  const chats = newValue[selectedModel.value.model]
+
+  if (chats.length)
+    selectedChatId.value = chats[0].id.toString()
+  else
+    createNewChat(selectedModel.value.model)
+}, { deep: true })
+
 function softReset() {
-  message.value = ''
   temporaryChatTitle.value = ''
   changingChatTitleId.value = ''
   loadingChangeChatTitle.value = false
-  image.value = ''
+  forceReset.value = false
 }
 
-function sendQuestion() {
-  if (!selectedModel.value || !message.value || !selectedChatId.value)
-    return
-
-  const model = selectedModel.value.model
-  const modelParameters = selectedModel.value.parameters
-
-  chatStore.askBot(model, modelParameters, selectedChatId.value, message.value, image.value)
-
-  message.value = ''
-  image.value = ''
-}
-
-function changeChat(chat: { id: string }) {
-  selectedChatId.value = chat.id
+function changeChat(chat: any) {
+  selectedChatId.value = chat.id.toString()
 }
 
 function changeChatTitle(chat: { id: string, title: string }) {
@@ -200,38 +111,7 @@ async function createNewChat(model: string) {
   const newChatId = await chatStore.createChat(model)
 
   if (newChatId !== null)
-    selectedChatId.value = newChatId
-}
-
-function goToModels() {
-  router.push('/models')
-}
-
-function goToMainPage() {
-  router.push('/')
-}
-
-function toBase64(file: Blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = error => reject(error)
-  })
-}
-
-async function handleImageUpload(event: any) {
-  if (!event.target?.files.length)
-    return
-
-  const file = event.target.files[0]
-
-  const fileInBase64 = await toBase64(file) as string
-  image.value = fileInBase64
-}
-
-function clearImage() {
-  image.value = ''
+    selectedChatId.value = newChatId.toString()
 }
 
 async function deleteChat(chat: { id: string }) {
@@ -241,29 +121,9 @@ async function deleteChat(chat: { id: string }) {
   await chatStore.deleteChat(selectedModel.value.model, chat.id)
 
   if (allChats.value[selectedModel.value.model].length)
-    selectedChatId.value = allChats.value[selectedModel.value.model][0].id
+    selectedChatId.value = allChats.value[selectedModel.value.model][0].id.toString()
   else
     await createNewChat(selectedModel.value.model)
-}
-
-function splitMessage(message: string) {
-  const parts = message.split(/(```[\s\S]*?```)/)
-
-  return parts.map((part) => {
-    if (part.startsWith('```') && part.endsWith('```')) {
-      const programmingLanguage = part.match(/```(.*)\n/)?.[1] || ''
-      const code = part.replace(/```(.*)\n|```$/g, '')
-
-      return { title: 'code', content: code.trim(), language: programmingLanguage.trim() }
-    }
-    else {
-      return { title: 'text', content: part.trim() }
-    }
-  })
-}
-
-function copyToClipboard(content: string) {
-  navigator.clipboard.writeText(content)
 }
 </script>
 
@@ -288,20 +148,20 @@ function copyToClipboard(content: string) {
 
     <v-btn
       class="mr-4"
-      @click="goToMainPage"
+      to="/"
     >
       Main page
     </v-btn>
 
     <v-btn
       class="mr-4"
-      @click="goToModels"
+      to="/models"
     >
       Models
     </v-btn>
 
     <v-btn
-      v-show="!loading && isAuthorized"
+      v-show="!loading && user"
       @click="authStore.logOut()"
     >
       Logout
@@ -338,7 +198,7 @@ function copyToClipboard(content: string) {
           ? ''
           : chat.title"
         :ripple="!isChangingMyTitle(chat)"
-        :active="selectedChatId === chat.id"
+        :active="selectedChatId === chat.id.toString()"
         @click="changeChat(chat)"
       >
         <v-text-field
@@ -404,209 +264,12 @@ function copyToClipboard(content: string) {
       />
     </v-card>
 
-    <v-card v-else>
-      <v-card-text>
-        <v-row>
-          <v-col
-            cols="12"
-            sm="5"
-            md="4"
-          >
-            <v-select
-              v-model="selectedModel"
-              label="AI Model"
-              :items="userPulledModels"
-              :item-title="item => `${item.name} - ${item.parameters}`"
-              return-object
-            >
-              <template #prepend-item>
-                <v-list-item
-                  @click="goToModels"
-                >
-                  Add more models
-
-                  <v-icon
-                    icon="mdi-arrow-right"
-                    class="ml-2"
-                  />
-                </v-list-item>
-
-                <v-divider class="my-2" />
-              </template>
-
-              <template #no-data />
-            </v-select>
-          </v-col>
-        </v-row>
-
-        <v-card
-          variant="outlined"
-          width="100%"
-          height="100%"
-        >
-          <v-card-text>
-            <v-list
-              :max-height="mobile
-                ? `${height - 360}px`
-                : `${height - 450}px`"
-            >
-              <div
-                v-for="(chatMessage, index) in chatHistoryPerModel[selectedModel?.model || ''] || []"
-                :key="index"
-                :style="chatMessage.role === 'user'
-                  ? 'justify-content: flex-end'
-                  : 'justify-content: flex-start'"
-                style="display: flex"
-                :class="index === 0
-                  ? ''
-                  : 'mt-4'"
-              >
-                <v-list-item
-                  rounded="shaped"
-                  :style="chatMessage.role === 'user'
-                    ? `background-color: ${userMessageColor}`
-                    : `background-color: ${botMessageColor}`"
-                  :max-width="mobile
-                    ? '90%'
-                    : '70%'"
-                  :class="chatMessage.role === 'user'
-                    ? 'text-align-end'
-                    : 'text-align-start'"
-                  class="px-4 py-2"
-                >
-                  <div v-if="chatMessage.role === 'assistant'">
-                    <div
-                      v-for="(part, partIndex) in splitMessage(chatMessage.content)"
-                      :key="partIndex"
-                    >
-                      <div
-                        v-if="part.title === 'text'"
-                        style="white-space: pre-wrap"
-                      >
-                        {{ part.content }}
-                      </div>
-
-                      <div
-                        v-else-if="part.title === 'code'"
-                        class="my-4"
-                      >
-                        <v-card>
-                          <v-card-title
-                            class="text-subtitle-2"
-                            style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
-                          >
-                            <span>
-                              {{ part.language }}
-                            </span>
-
-                            <v-btn
-                              size="x-small"
-                              icon="mdi-content-copy"
-                              @click="copyToClipboard(part.content)"
-                            />
-                          </v-card-title>
-
-                          <v-card-text
-                            style="white-space: pre-wrap"
-                            class="mt-3"
-                          >
-                            {{ part.content }}
-                          </v-card-text>
-                        </v-card>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-else>
-                    {{ chatMessage.content }}
-                  </div>
-
-                  <p
-                    v-if="chatMessage.image"
-                    align="end"
-                    class="mt-2"
-                  >
-                    <img
-                      :src="chatMessage.image"
-                      alt="Uploaded image"
-                      style="max-width: 100%; max-height: 100px"
-                    >
-                  </p>
-                </v-list-item>
-              </div>
-            </v-list>
-
-            <v-spacer class="mt-4" />
-
-            <span
-              v-if="sendingMessage"
-              class="text-gray"
-            >
-              Bot is thinking...
-            </span>
-
-            <v-row
-              v-if="image"
-              justify="end"
-              class="ma-0"
-            >
-              <v-badge
-                icon="mdi-close"
-                color="error"
-                @click="clearImage"
-              >
-                <img
-                  :src="image"
-                  alt="Uploaded image"
-                  style="max-width: 100%; max-height: 100px"
-                >
-              </v-badge>
-            </v-row>
-          </v-card-text>
-        </v-card>
-
-        <v-row class="mx-2 mt-4">
-          <v-text-field
-            v-model="message"
-            label="Message"
-            @keydown.enter="sendQuestion"
-          />
-
-          <v-btn
-            v-if="selectedModel?.canProcessImages"
-            variant="flat"
-            class="ml-4 mt-1"
-            icon
-            @click="$refs.fileInput.click()"
-          >
-            <v-icon
-              size="x-large"
-              icon="mdi-file-upload-outline"
-            />
-
-            <input
-              ref="fileInput"
-              type="file"
-              accept="image/*"
-              style="display: none"
-              @change="handleImageUpload"
-            >
-          </v-btn>
-
-          <v-btn
-            variant="flat"
-            class="ml-2 mt-1"
-            icon
-            :loading="sendingMessage"
-            @click="sendQuestion"
-          >
-            <v-icon
-              size="x-large"
-              icon="mdi-send-circle-outline"
-            />
-          </v-btn>
-        </v-row>
-      </v-card-text>
-    </v-card>
+    <ChatCard
+      v-else
+      v-model:selected-model="selectedModel"
+      :reset="forceReset"
+      :selected-chat-id="selectedChatId"
+      @soft-reset="softReset"
+    />
   </v-container>
 </template>
