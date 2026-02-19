@@ -25,11 +25,9 @@ def load_dotenv():
     dotenv_path = path.join(BASE_DIR, ".env")
     example_dotenv_path = path.join(BASE_DIR, ".env.example")
 
-    env_path = dotenv.find_dotenv(filename=dotenv_path, raise_error_if_not_found=True)
+    env_path = dotenv.find_dotenv(filename=dotenv_path)
     if not env_path:
-        env_path = dotenv.find_dotenv(
-            filename=example_dotenv_path, raise_error_if_not_found=True
-        )
+        env_path = dotenv.find_dotenv(filename=example_dotenv_path)
 
     if env_path:
         dotenv.load_dotenv(env_path)
