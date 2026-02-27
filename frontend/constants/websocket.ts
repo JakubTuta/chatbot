@@ -12,6 +12,7 @@ export interface WebsocketMessage {
 export interface WebsocketResponse {
   message: string
   done: boolean
+  error?: string
 }
 
 export interface WebsocketHandlers {
@@ -19,12 +20,18 @@ export interface WebsocketHandlers {
   onDisconnect: () => void
   onSendMessage: (message: WebsocketMessage) => void
   onReceiveMessage: (data: WebsocketResponse) => void
+  onError?: (message: string) => void
+  onReconnecting?: (attempt: number) => void
 }
 
 export interface WebSocketWrapper extends WebSocket {
   sendMessage: (message: WebsocketMessage) => void
   closeConnection: () => void
 }
+
+const RECONNECT_BASE_DELAY_MS = 1000
+const RECONNECT_MAX_DELAY_MS = 30_000
+const RECONNECT_MAX_ATTEMPTS = 8
 
 export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSocketWrapper | null {
   const runtimeConfig = useRuntimeConfig()
@@ -41,26 +48,76 @@ export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSo
     return null
   }
 
-  const socket = new WebSocket(`ws://${socketHost}/ws/chat/${roomId}/?token=${token}`)
+  let reconnectAttempts = 0
+  let intentionallyClosed = false
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
-  socket.addEventListener('open', () => {
-    handlers.onConnect()
-  })
+  function buildSocket(): WebSocket {
+    const ws = new WebSocket(`ws://${socketHost}/ws/chat/${roomId}/?token=${localStorage.getItem(ACCESS_TOKEN) || token}`)
 
-  socket.addEventListener('close', () => {
-    handlers.onDisconnect()
-  })
+    ws.addEventListener('open', () => {
+      reconnectAttempts = 0
+      handlers.onConnect()
+    })
 
-  socket.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data)
-      handlers.onReceiveMessage(data)
-    }
-    catch (error) {
-      console.error('Failed to parse WebSocket message:', error)
-    }
-  })
+    ws.addEventListener('close', () => {
+      if (intentionallyClosed)
+        return
 
+      handlers.onDisconnect()
+
+      if (reconnectAttempts < RECONNECT_MAX_ATTEMPTS) {
+        const delay = Math.min(
+          RECONNECT_BASE_DELAY_MS * 2 ** reconnectAttempts,
+          RECONNECT_MAX_DELAY_MS,
+        )
+        reconnectAttempts++
+
+        handlers.onReconnecting?.(reconnectAttempts)
+
+        reconnectTimer = setTimeout(() => {
+          const newSocket = buildSocket()
+          Object.assign(extendedSocket, newSocket)
+          extendedSocket.sendMessage = (message: WebsocketMessage) => {
+            if (newSocket.readyState === WebSocket.OPEN) {
+              newSocket.send(JSON.stringify(message))
+              handlers.onSendMessage(message)
+            }
+            else {
+              console.warn('WebSocket is not open. Message not sent:', message)
+            }
+          }
+          extendedSocket.closeConnection = () => {
+            intentionallyClosed = true
+            if (reconnectTimer)
+              clearTimeout(reconnectTimer)
+            if (newSocket.readyState !== WebSocket.CLOSED)
+              newSocket.close()
+          }
+        }, delay)
+      }
+    })
+
+    ws.addEventListener('message', (event) => {
+      try {
+        const data: WebsocketResponse = JSON.parse(event.data)
+
+        if (data.error) {
+          handlers.onError?.(data.error)
+          return
+        }
+
+        handlers.onReceiveMessage(data)
+      }
+      catch (error) {
+        console.error('Failed to parse WebSocket message:', error)
+      }
+    })
+
+    return ws
+  }
+
+  const socket = buildSocket()
   const extendedSocket = socket as WebSocketWrapper
 
   extendedSocket.sendMessage = (message: WebsocketMessage) => {
@@ -74,9 +131,11 @@ export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSo
   }
 
   extendedSocket.closeConnection = () => {
-    if (socket.readyState !== WebSocket.CLOSED) {
+    intentionallyClosed = true
+    if (reconnectTimer)
+      clearTimeout(reconnectTimer)
+    if (socket.readyState !== WebSocket.CLOSED)
       socket.close()
-    }
   }
 
   return extendedSocket

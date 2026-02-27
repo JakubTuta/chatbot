@@ -1,8 +1,9 @@
-import requests
 from django.contrib.auth.models import User
-from django.http import QueryDict
-
-base_url = "http://localhost:8000"
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+    TokenVerifySerializer,
+)
 
 
 def find_user(username: str) -> User | None:
@@ -14,42 +15,30 @@ def check_if_password_correct(user: User, password: str) -> bool:
 
 
 def get_jwt_token(username: str, password: str) -> dict[str, str]:
-    url = f"{base_url}/auth/token/"
-
-    data: dict[str, str] = {
+    serializer = TokenObtainPairSerializer(data={
         "username": username,
         "password": password,
-    }
+    })
+    serializer.is_valid(raise_exception=True)
 
-    response: requests.Response = requests.post(url, data=data)
-
-    return response.json()
+    return dict(serializer.validated_data)
 
 
 def refresh_token(token: str) -> str | None:
-    url = f"{base_url}/auth/token/refresh/"
+    serializer = TokenRefreshSerializer(data={"refresh": token})
 
-    data: dict[str, str] = {
-        "refresh": token,
-    }
-
-    response: requests.Response = requests.post(url, data=data)
-
-    if response.status_code != 200:
+    try:
+        serializer.is_valid(raise_exception=True)
+        return str(serializer.validated_data["access"])
+    except Exception:
         return None
-
-    access_token: str = response.json()["access"]
-
-    return access_token
 
 
 def verify_token(token: str) -> bool:
-    url = f"{base_url}/auth/token/verify/"
+    serializer = TokenVerifySerializer(data={"token": token})
 
-    data: dict[str, str] = {
-        "token": token,
-    }
-
-    response: requests.Response = requests.post(url, data=data)
-
-    return response.status_code == 200
+    try:
+        serializer.is_valid(raise_exception=True)
+        return True
+    except Exception:
+        return False

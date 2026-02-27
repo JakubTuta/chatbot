@@ -8,7 +8,6 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user' | 'assistant'
       content: string
       image: string
-
     }[]
   }>({})
   const allChats = ref<{ [model: string]: { id: string, title: string }[] }>({})
@@ -17,65 +16,13 @@ export const useChatStore = defineStore('chat', () => {
   const loading = ref(false)
 
   const apiStore = useApiStore()
-  const authStore = useAuthStore()
+  const snackbarStore = useSnackbarStore()
   const { api } = storeToRefs(apiStore)
 
   const resetState = () => {
     aiModels.value = []
     chatHistoryPerModel.value = {}
     sendingMessage.value = false
-  }
-
-  const postRequest = async (url: string, data: any) => {
-    if (!(await authStore.isTokenValid())) {
-      authStore.logOut()
-
-      return null
-    }
-
-    try {
-      const response = await api.value.post(url, data)
-
-      if (response.status === 401) {
-        authStore.logOut()
-      }
-
-      return response
-    }
-    catch (error: any) {
-      console.error(error)
-      if (error.response?.status === 401) {
-        authStore.logOut()
-      }
-    }
-
-    return null
-  }
-
-  const getRequest = async (url: string, params: any) => {
-    if (!(await authStore.isTokenValid())) {
-      authStore.logOut()
-
-      return null
-    }
-
-    try {
-      const response = await api.value.get(url, { params })
-
-      if (response.status === 401) {
-        authStore.logOut()
-      }
-
-      return response
-    }
-    catch (error: any) {
-      console.error(error)
-      if (error.response?.status === 401) {
-        authStore.logOut()
-      }
-    }
-
-    return null
   }
 
   const fetchAIModels = async () => {
@@ -92,6 +39,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     catch (error: any) {
       console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to load AI models.')
     }
     finally {
       loading.value = false
@@ -111,28 +59,42 @@ export const useChatStore = defineStore('chat', () => {
     }
     catch (error: any) {
       console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to pull AI models.')
     }
-
-    loading.value = false
+    finally {
+      loading.value = false
+    }
   }
 
   const fetchAllChats = async (model: string) => {
     const url = `all-chats/${model}`
 
-    const response = await getRequest(url, { model })
+    try {
+      const response = await api.value.get(url, { params: { model } })
 
-    if (response?.status === 200) {
-      allChats.value[model] = response.data
+      if (response?.status === 200) {
+        allChats.value[model] = response.data
+      }
+    }
+    catch (error: any) {
+      console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to load chats.')
     }
   }
 
   const fetchChatHistory = async (model: string, chatId: string) => {
     const url = `chat-history/${model}/${chatId}`
 
-    const response = await getRequest(url, { model })
+    try {
+      const response = await api.value.get(url, { params: { model } })
 
-    if (response?.status === 200) {
-      chatHistoryPerModel.value[model] = response.data
+      if (response?.status === 200) {
+        chatHistoryPerModel.value[model] = response.data
+      }
+    }
+    catch (error: any) {
+      console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to load chat history.')
     }
   }
 
@@ -151,34 +113,47 @@ export const useChatStore = defineStore('chat', () => {
       image,
     })
 
-    const response = await postRequest(url, { model, message, image })
+    try {
+      const response = await api.value.post(url, { model, message, image })
 
-    if (response?.status === 200) {
-      chatHistoryPerModel.value[model].push({
-        role: 'assistant',
-        content: response.data.content,
-        image: '',
-      })
+      if (response?.status === 200) {
+        chatHistoryPerModel.value[model].push({
+          role: 'assistant',
+          content: response.data.content,
+          image: '',
+        })
+      }
     }
-
-    sendingMessage.value = false
+    catch (error: any) {
+      console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to get a response from the bot.')
+    }
+    finally {
+      sendingMessage.value = false
+    }
   }
 
   const createChat = async (model: string) => {
     const url = `all-chats/${model}`
 
-    const response = await postRequest(url, {})
+    try {
+      const response = await api.value.post(url, {})
 
-    if (response?.status === 201) {
-      const { id, title } = response.data
+      if (response?.status === 201) {
+        const { id, title } = response.data
 
-      if (!allChats.value[model]) {
-        allChats.value[model] = []
+        if (!allChats.value[model]) {
+          allChats.value[model] = []
+        }
+
+        allChats.value[model].push({ id, title })
+
+        return id
       }
-
-      allChats.value[model].push({ id, title })
-
-      return id
+    }
+    catch (error: any) {
+      console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to create a new chat.')
     }
 
     return null
@@ -186,12 +161,6 @@ export const useChatStore = defineStore('chat', () => {
 
   const deleteChat = async (model: string, chatId: string) => {
     const url = `all-chats/${model}`
-
-    if (!(await authStore.isTokenValid())) {
-      authStore.logOut()
-
-      return
-    }
 
     try {
       const response = await api.value.delete(url, { data: { chat_id: chatId } })
@@ -203,23 +172,15 @@ export const useChatStore = defineStore('chat', () => {
 
         allChats.value[model] = allChats.value[model].filter(chat => chat.id !== chatId)
       }
-      else if (response.status === 401) {
-        authStore.logOut()
-      }
     }
-    catch (error) {
+    catch (error: any) {
       console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to delete the chat.')
     }
   }
 
   const changeChatTitle = async (model: string, chat: { id: string }, newTitle: string) => {
     const url = `all-chats/${model}`
-
-    if (!(await authStore.isTokenValid())) {
-      authStore.logOut()
-
-      return
-    }
 
     try {
       const response = await api.value.put(url, { id: chat.id, title: newTitle })
@@ -235,12 +196,10 @@ export const useChatStore = defineStore('chat', () => {
           allChats.value[model] = [foundChat, ...allChats.value[model].filter(e => e.id !== chat.id)]
         }
       }
-      else if (response.status === 401) {
-        authStore.logOut()
-      }
     }
-    catch (error) {
+    catch (error: any) {
       console.error(error)
+      snackbarStore.showSnackbarError(error.response?.data?.error || 'Failed to rename the chat.')
     }
   }
 

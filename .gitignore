@@ -29,7 +29,7 @@ venv
 test.*
 *.http
 .env
-*praison*
 .vscode
 *lock.json
 migrations
+.claude/

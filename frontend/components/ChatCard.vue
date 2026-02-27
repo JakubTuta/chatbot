@@ -33,6 +33,8 @@ const botThoughtsVisible = ref(false)
 const userMessageColor = '#168AFF'
 const botMessageColor = '#9F33FF'
 
+const splitMessageCache = new Map<string, ReturnType<typeof splitMessageRaw>>()
+
 const { height, mobile } = useDisplay()
 
 const chatStore = useChatStore()
@@ -40,6 +42,10 @@ const { chatHistoryPerModel, aiModels } = storeToRefs(chatStore)
 
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
+
+const snackbarStore = useSnackbarStore()
+
+const isReconnecting = ref(false)
 
 onUnmounted(() => {
   if (websocket.value)
@@ -50,12 +56,13 @@ const chatHistory = computed(() => {
   if (!selectedModel.value || !chatHistoryPerModel.value[selectedModel.value.model])
     return []
 
-  // eslint-disable-next-line vue/no-async-in-computed-properties
-  setTimeout(() => {
-    scrollToBottom()
-  }, 1000)
-
   return chatHistoryPerModel.value[selectedModel.value.model]
+})
+
+watch(chatHistory, () => {
+  nextTick(() => {
+    scrollToBottom()
+  })
 })
 
 const userPulledModels = computed(() => {
@@ -124,13 +131,26 @@ function scrollToBottom() {
 
 const websocketHandlers = {
   onConnect: () => {
+    isReconnecting.value = false
     // eslint-disable-next-line no-console
     console.log(`Connected to room ${selectedChatId.value}`)
   },
 
   onDisconnect: () => {
+    waitingForResponse.value = false
     // eslint-disable-next-line no-console
     console.log(`Disconnected from room ${selectedChatId.value}`)
+  },
+
+  onReconnecting: (attempt: number) => {
+    isReconnecting.value = true
+    // eslint-disable-next-line no-console
+    console.log(`Reconnecting... attempt ${attempt}`)
+  },
+
+  onError: (errorMessage: string) => {
+    waitingForResponse.value = false
+    snackbarStore.showSnackbarError(errorMessage)
   },
 
   onSendMessage: (message: WebsocketMessage) => {
@@ -180,6 +200,7 @@ function softReset() {
   message.value = ''
   image.value = ''
   botResponse.value = ''
+  splitMessageCache.clear()
   emit('softReset')
 }
 
@@ -188,6 +209,16 @@ function copyToClipboard(content: string) {
 }
 
 function splitMessage(message: string) {
+  if (splitMessageCache.has(message))
+    return splitMessageCache.get(message)!
+
+  const result = splitMessageRaw(message)
+  splitMessageCache.set(message, result)
+
+  return result
+}
+
+function splitMessageRaw(message: string) {
   let thoughts = ''
   let remainingMessage = message
 
@@ -396,6 +427,16 @@ watch(waitingForResponse, (newValue) => {
         height="100%"
       >
         <v-card-text>
+          <v-alert
+            v-if="isReconnecting"
+            type="warning"
+            density="compact"
+            class="mb-3"
+            variant="tonal"
+          >
+            Connection lost — reconnecting...
+          </v-alert>
+
           <v-list
             :max-height="mobile
               ? `${height - 360}px`
@@ -578,14 +619,60 @@ watch(waitingForResponse, (newValue) => {
               v-if="waitingForResponse"
               rounded="shaped"
               :style="`display: flex; justify-content: flex-start; background-color: ${botMessageColor}`"
-              max-width="10%"
-              class="d-flex mt-4 justify-center px-4 py-2"
+              max-width="15%"
+              class="d-flex mt-4 justify-center px-4 py-3"
             >
-              <v-progress-circular
-                indeterminate
-                color="primary"
-                size="24"
-              />
+              <div class="typing-indicator">
+                <span />
+                <span />
+                <span />
+              </div>
+            </v-list-item>
+
+            <v-list-item
+              v-if="!chatHistory.length && !botResponse && !waitingForResponse && selectedModel"
+              class="d-flex justify-center mt-8"
+            >
+              <div class="text-center text-medium-emphasis">
+                <v-icon
+                  size="48"
+                  icon="mdi-chat-outline"
+                  class="mb-3 d-block"
+                />
+                <div class="text-body-1">
+                  Start the conversation!
+                </div>
+                <div class="text-body-2 mt-1">
+                  Type a message below and press Enter.
+                </div>
+              </div>
+            </v-list-item>
+
+            <v-list-item
+              v-if="!selectedModel"
+              class="d-flex justify-center mt-8"
+            >
+              <div class="text-center text-medium-emphasis">
+                <v-icon
+                  size="48"
+                  icon="mdi-robot-outline"
+                  class="mb-3 d-block"
+                />
+                <div class="text-body-1">
+                  No model selected
+                </div>
+                <div class="text-body-2 mt-1">
+                  Select a model above or
+                  <v-btn
+                    variant="text"
+                    size="small"
+                    class="px-1"
+                    to="/models"
+                  >
+                    add one on the Models page
+                  </v-btn>.
+                </div>
+              </div>
             </v-list-item>
 
             <div ref="scrollToMe" />
@@ -657,3 +744,29 @@ watch(waitingForResponse, (newValue) => {
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typing-indicator span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.8);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+</style>

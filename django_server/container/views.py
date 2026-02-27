@@ -11,8 +11,8 @@ from .ContainerManager import ContainerManager
 
 
 class Docker(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request) -> Response:
         # url: /docker/
@@ -21,19 +21,19 @@ class Docker(APIView):
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         return Response(
-            {"Status": "Docker is running"},
+            {"status": "Docker is running"},
             status=status.HTTP_200_OK,
         )
 
 
 class Containers(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request) -> Response:
         # url: /docker/containers/
@@ -42,7 +42,7 @@ class Containers(APIView):
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -52,8 +52,8 @@ class Containers(APIView):
 
 
 class OllamaImage(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request) -> Response:
         # url: /docker/ollama-image/
@@ -62,7 +62,7 @@ class OllamaImage(APIView):
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -78,21 +78,21 @@ class OllamaImage(APIView):
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         docker_client.pull_ollama_image()
 
         return Response(
-            {"Status": "ollama/ollama image pulled"},
+            {"status": "ollama/ollama image pulled"},
             status=status.HTTP_200_OK,
         )
 
 
 class Container(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, model) -> Response:
         # url: /docker/container/{model}
@@ -101,18 +101,18 @@ class Container(APIView):
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if not (container := docker_client.get_container(model)):
             return Response(
-                {"Status": "Container not found"}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Container not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         return Response(
             {
-                "Status": "Container found",
+                "status": "Container found",
                 "container": ContainerManager.map_container(container),
             },
             status=status.HTTP_200_OK,
@@ -125,19 +125,19 @@ class Container(APIView):
 
         if (query_model_params := request.query_params.get("parameters", None)) is None:
             return Response(
-                {"Status": "Invalid request"},
+                {"error": "Invalid request: missing 'parameters' query param"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         if not (ai_model := AIModel.objects.filter(model=model).first()):
             return Response(
-                {"Status": "Model not found"}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Model not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         if not (
@@ -151,20 +151,20 @@ class Container(APIView):
             )
         ):
             return Response(
-                {"Status": "Invalid model version"}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Invalid model version"}, status=status.HTTP_404_NOT_FOUND
             )
 
         if (
             container := docker_client.run_container(ai_model, ai_model_version)
         ) is None:
             return Response(
-                {"Status": "Container not found"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"error": "Failed to start container"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         return Response(
             {
-                "Status": "Container is running",
+                "status": "Container is running",
                 "container": ContainerManager.map_container(container),
             },
             status=status.HTTP_200_OK,
@@ -180,13 +180,13 @@ class Container(APIView):
 
         if query_model_params is None or query_method is None:
             return Response(
-                {"Status": "Invalid request"},
+                {"error": "Invalid request: missing 'parameters' or 'method' query params"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
             return Response(
-                {"Status": "Error connecting to Docker"},
+                {"error": "Error connecting to Docker"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -196,7 +196,7 @@ class Container(APIView):
             docker_client.stop_container(container_name)
 
             return Response(
-                {"Status": "Container stopped"},
+                {"status": "Container stopped"},
                 status=status.HTTP_200_OK,
             )
 
@@ -204,12 +204,12 @@ class Container(APIView):
             docker_client.remove_container(container_name)
 
             return Response(
-                {"Status": "Container removed"},
+                {"status": "Container removed"},
                 status=status.HTTP_200_OK,
             )
 
         else:
             return Response(
-                {"Status": "Invalid method"},
+                {"error": "Invalid method: use 'stop' or 'remove'"},
                 status=status.HTTP_400_BAD_REQUEST,
             )

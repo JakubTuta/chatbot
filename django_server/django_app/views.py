@@ -13,8 +13,15 @@ from . import functions, models, scrape_ollama, serializers
 class AIModels(APIView):
     # url: /ai-models/
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    def get_authenticators(self):
+        if self.request.method == "GET":
+            return []
+        return [JWTAuthentication()]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get(self, request: Request) -> Response:
         all_models = models.AIModel.objects.all().order_by("-popularity")
@@ -40,12 +47,12 @@ class AIModels(APIView):
 
         if not success:
             return Response(
-                {"Error": "Failed to pull new models from ollama"},
+                {"error": "Failed to pull new models from ollama"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(
-            {"Status": "Pulled new models from ollama"},
+            {"status": "Pulled new models from ollama"},
             status=status.HTTP_200_OK,
         )
 
@@ -66,7 +73,7 @@ class AIModels(APIView):
         if request_data["can_process_image"] not in ["true", "false"]:
             return Response(
                 {
-                    "Error": "Invalid value for 'can_process_image', must be 'true' or 'false'"
+                    "error": "Invalid value for 'can_process_image', must be 'true' or 'false'"
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -79,7 +86,7 @@ class AIModels(APIView):
 
         if not version_serializer.is_valid():
             return Response(
-                {"Error": "Invalid version data"},
+                {"error": "Invalid version data"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -90,7 +97,7 @@ class AIModels(APIView):
                 found_model, version_data["parameters"]
             ):
                 return Response(
-                    {"Error": "Version already exists"},
+                    {"error": "Version already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -102,7 +109,7 @@ class AIModels(APIView):
 
             return Response(
                 {
-                    "Status": "Model updated",
+                    "status": "Model updated",
                     "model": found_model.model,
                     "version": version_data,
                 },
@@ -124,7 +131,7 @@ class AIModels(APIView):
 
         if not model_serializer.is_valid():
             return Response(
-                {"Error": "Invalid model data"},
+                {"error": "Invalid model data"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -132,7 +139,7 @@ class AIModels(APIView):
 
         return Response(
             {
-                "Status": "New model created",
+                "status": "New model created",
                 "model": model_data["model"],
                 "version": version_data,
             },
@@ -149,7 +156,7 @@ class ChatHistory(APIView):
     def get(self, request: Request, model: str, chat_id: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
-                {"Error": "AI model not found"},
+                {"error": "AI model not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -174,7 +181,7 @@ class AllChats(APIView):
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
-                    "Error": "AI model not found",
+                    "error": "AI model not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -195,7 +202,7 @@ class AllChats(APIView):
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
-                    "Error": "AI model not found",
+                    "error": "AI model not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -207,7 +214,7 @@ class AllChats(APIView):
         if not serializer.is_valid():
             return Response(
                 {
-                    "Error": "Invalid chat data",
+                    "error": "Invalid chat data",
                     "details": serializer.errors,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -227,7 +234,7 @@ class AllChats(APIView):
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
-                    "Error": "AI model not found",
+                    "error": "AI model not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -239,7 +246,7 @@ class AllChats(APIView):
         if not chat_history:
             return Response(
                 {
-                    "Error": "Chat not found",
+                    "error": "Chat not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -247,7 +254,7 @@ class AllChats(APIView):
         chat_history.delete()
         return Response(
             {
-                "Status": "Chat deleted",
+                "status": "Chat deleted",
             },
             status=status.HTTP_200_OK,
         )
@@ -259,7 +266,7 @@ class AllChats(APIView):
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
-                    "Error": "AI model not found",
+                    "error": "AI model not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -271,7 +278,7 @@ class AllChats(APIView):
         ) is None:
             return Response(
                 {
-                    "Error": "Chat not found",
+                    "error": "Chat not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -281,7 +288,7 @@ class AllChats(APIView):
 
         return Response(
             {
-                "Status": "Chat title updated",
+                "status": "Chat title updated",
             },
             status=status.HTTP_200_OK,
         )
@@ -301,7 +308,7 @@ class AskBot(APIView):
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
                 {
-                    "Error": "AI model not found",
+                    "error": "AI model not found",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -327,7 +334,7 @@ class AskBot(APIView):
         ):
             return Response(
                 {
-                    "Error": "Failed to get response from bot",
+                    "error": "Failed to get response from bot",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -342,14 +349,14 @@ class AskBot(APIView):
         except Exception as e:
             return Response(
                 {
-                    "Error": f"Failed to create message: {str(e)}",
+                    "error": f"Failed to create message: {str(e)}",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(
             {
-                "Status": "Response generated",
+                "status": "Response generated",
                 "content": bot_response,
             },
             status=status.HTTP_200_OK,

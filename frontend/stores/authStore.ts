@@ -128,7 +128,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (response.status === 200) {
         localStorage.setItem(ACCESS_TOKEN, response.data.access)
-        getCurrentUser()
+        await getCurrentUser()
       }
       else {
         clearAuth()
@@ -158,7 +158,7 @@ export const useAuthStore = defineStore('auth', () => {
       await refreshToken()
     }
     else {
-      getCurrentUser()
+      await getCurrentUser()
     }
 
     return user.value !== null

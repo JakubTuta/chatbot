@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import time
@@ -284,7 +285,7 @@ def scrape_ollama(min_pull_count: int) -> bool:
 
                 processed_models.add(model_variant_id)
 
-                server_url = "http://localhost:8000/ai-models/"
+                server_url = os.getenv("SERVER_URL", "http://localhost:8000") + "/ai-models/"
 
                 can_model_process_images = can_process_images(
                     title

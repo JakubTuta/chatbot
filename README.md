@@ -1,138 +1,149 @@
 # Chatbot
 
-## 🚀 Overview
+## Overview
 
-**Chatbot** is a simple yet powerful tool that allows you to pull and run Large Language Models (LLMs) locally using Docker and Ollama. Designed for developers and enthusiasts, this app makes it easy to chat with advanced AI models directly on your device, ensuring privacy and flexibility.
-
----
-
-## 🌟 Features
-
-- **Local Deployment**: Run AI models securely on your own machine—no cloud required.
-- **Docker Support**: Leverage Docker for hassle-free setup and compatibility.
-- **Interactive AI Chat**: Engage with Large Language Models in real-time conversations.
-- **Privacy First**: Your data stays local, giving you complete control.
-- **User friendly UI**: Simple and user friendly front-end app created with Nuxt
+**Chatbot** is a self-hosted web app for running and chatting with Large Language Models (LLMs) locally using Docker and Ollama. No cloud required — your data stays on your machine.
 
 ---
 
-## 🛠️ Getting Started
+## Features
+
+- **Local LLM execution** — run models via Ollama in Docker containers
+- **Real-time chat** — streaming responses over WebSocket
+- **Model management** — browse, pull, and run models from the Ollama library
+- **Multi-user support** — JWT authentication with per-user chat history
+- **Image input** — send images to vision-capable models
+- **Structured output** — have models respond in a defined JSON schema
+- **Docker management** — start, stop, and remove containers directly from the UI
+
+---
+
+## Quick Start (Docker — recommended)
 
 ### Prerequisites
 
-- [Docker](https://www.docker.com/) installed on your machine
+- [Docker](https://www.docker.com/) installed and running
 
-### Enabling models to use NVIDIA GPU (increased performance) [optional]
-
-- Windows [NVIDIA GPUs with WSL2](https://docs.docker.com/desktop/features/gpu/)
-- Linux / MacOS [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
-
-## Running app with docker
-
-#### 1. Clone the repository:
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/JakubTuta/chatbot.git
-
 cd chatbot
 ```
 
-#### 2. Starting app
+### 2. Create the backend environment file
+
+```bash
+cp django_server/.env.example django_server/.env
+```
+
+The defaults in `.env.example` work out of the box for a local Docker setup. You only need to change `SECRET_KEY` for any serious use.
+
+### 3. Start the app
 
 ```bash
 docker-compose up -d
 ```
 
-Django server runs on `http://localhost:8000` \
-Nuxt web app runs on `http://localhost:3000` \
-MongoDB runs on `http://localhost:27017`
+| Service  | URL                      |
+|----------|--------------------------|
+| Frontend | http://localhost:3000    |
+| Backend  | http://localhost:8000    |
+| MongoDB  | localhost:27017          |
 
-## Running each module separately
+### GPU support (optional, increases model performance)
 
-### 1. Starting server
+- **Windows** — [NVIDIA GPUs with WSL2](https://docs.docker.com/desktop/features/gpu/)
+- **Linux / macOS** — [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
+
+---
+
+## Running locally (without Docker)
+
+### Backend
 
 ```bash
 cd django_server
-```
 
-Create virtual environment
-
-```bash
+# Create and activate a virtual environment
 python -m venv venv
-```
+source venv/bin/activate        # macOS / Linux
+# venv\Scripts\activate         # Windows
 
-Run virtual environment
-
-```bash
-# on Windows
-venv/Scripts/activate
-
-# on MacOS / Linux
-source venv/bin/activate
-```
-
-Install the modules:
-
-```bash
 pip install -r requirements.txt
 ```
 
-Create `.env` file in `backend` directory with following content (check .env.example for reference):
+Copy and configure the environment file:
 
 ```bash
-SECRET_KEY: Django secret key (you can generate it [here](https://djecrety.ir/))
-DEBUG: true/false
-DATABASE_USERNAME: Database username
-DATABASE_PASSWORD: Database password
-DATABASE_NAME: Database name
-DATABASE_PORT: Database port
-MONGO_CONTAINER_NAME: MongoDB container name (for example mongodb)
-LOCAL_DATABASE_HOST: MongoDB url (for example hosted on docker) (for communication between local and docker)
-DOCKER_DATABASE_HOST: MongoDB url (for example hosted on docker) (for communication between docker and docker)
-
-# Optional
-PRODUCTION_DATABASE_HOST: Production MongoDB url (for example hosted on mongodb atlas)
-IS_PRODUCTION: true if production, false if local
+cp .env.example .env
 ```
 
-Make sure the mongodb database is running on `http://localhost:27017` \
-ONLY FOR THE FIRST TIME:
+Edit `.env` — the only values you must set for local development:
+
+```env
+SECRET_KEY="your-secret-key"        # generate at https://djecrety.ir/
+DEBUG="true"
+SERVER_URL="http://localhost:8000"
+DATABASE_USERNAME="admin"
+DATABASE_PASSWORD="password"
+DATABASE_NAME="chatbot"
+DATABASE_PORT="27017"
+MONGO_CONTAINER_NAME="mongodb"
+LOCAL_DATABASE_HOST="mongodb://admin:password@localhost:27017/?retryWrites=true&w=majority&appName=chatbot"
+DOCKER_DATABASE_HOST="mongodb://admin:password@mongodb/?retryWrites=true&w=majority&appName=chatbot"
+```
+
+First-time setup (run once):
 
 ```bash
 python replace_context.py
 python manage.py migrate
 ```
 
-Now you can run server
+Start the server:
 
 ```bash
 python manage.py runserver
 ```
 
-Django server is running on `http://localhost:8000`
+Backend is available at `http://localhost:8000`.
 
-### 2. Starting Nuxt app
+### Frontend
 
 ```bash
 cd frontend
-```
-
-Install the dependencies:
-
-```bash
-# replace npm with any package manager
 npm install
-```
-
-```bash
-# # replace npm with any package manager
 npm run dev
 ```
 
-Nuxt app is running on `http://localhost:3000`
+Frontend is available at `http://localhost:3000`.
 
 ---
 
-## 📄 License
+## Environment variables reference
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+| Variable                  | Required | Default       | Description                                              |
+|---------------------------|----------|---------------|----------------------------------------------------------|
+| `SECRET_KEY`              | Yes      | —             | Django secret key. Generate at https://djecrety.ir/     |
+| `DEBUG`                   | No       | `false`       | Set to `true` for local development                      |
+| `SERVER_URL`              | No       | `http://localhost:8000` | Base URL of the backend (used during model scraping) |
+| `DATABASE_USERNAME`       | Yes      | —             | MongoDB username                                         |
+| `DATABASE_PASSWORD`       | Yes      | —             | MongoDB password                                         |
+| `DATABASE_NAME`           | Yes      | —             | MongoDB database name                                    |
+| `DATABASE_PORT`           | Yes      | `27017`       | MongoDB port                                             |
+| `MONGO_CONTAINER_NAME`    | No       | `mongodb`     | MongoDB container hostname (Docker networking)           |
+| `LOCAL_DATABASE_HOST`     | No*      | —             | MongoDB connection string for local development          |
+| `DOCKER_DATABASE_HOST`    | No*      | —             | MongoDB connection string when running inside Docker     |
+| `PRODUCTION_DATABASE_HOST`| No       | —             | MongoDB Atlas or remote connection string                |
+| `IS_PRODUCTION`           | No       | `false`       | Set to `true` to use `PRODUCTION_DATABASE_HOST`          |
+| `ALLOWED_HOSTS`           | No       | `*`           | Comma-separated list of allowed host headers             |
+| `CORS_ALLOW_ALL_ORIGINS`  | No       | `true`        | Set to `false` and configure `CORS_ALLOWED_ORIGINS` for production |
+
+*At least one of `LOCAL_DATABASE_HOST` or `DOCKER_DATABASE_HOST` is required depending on your setup.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.

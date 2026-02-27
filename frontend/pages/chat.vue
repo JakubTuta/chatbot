@@ -10,6 +10,9 @@ const selectedModel = ref<IContainer | null>(null)
 const selectedChatId = ref('')
 const forceReset = ref(false)
 
+const confirmDeleteDialog = ref(false)
+const chatToDelete = ref<{ id: string } | null>(null)
+
 const authStore = useAuthStore()
 const { user } = storeToRefs(authStore)
 
@@ -114,16 +117,29 @@ async function createNewChat(model: string) {
     selectedChatId.value = newChatId.toString()
 }
 
-async function deleteChat(chat: { id: string }) {
-  if (!selectedModel.value)
+function deleteChat(chat: { id: string }) {
+  chatToDelete.value = chat
+  confirmDeleteDialog.value = true
+}
+
+async function confirmDeleteChat() {
+  confirmDeleteDialog.value = false
+
+  if (!selectedModel.value || !chatToDelete.value)
     return
 
-  await chatStore.deleteChat(selectedModel.value.model, chat.id)
+  await chatStore.deleteChat(selectedModel.value.model, chatToDelete.value.id)
+  chatToDelete.value = null
 
-  if (allChats.value[selectedModel.value.model].length)
+  if (allChats.value[selectedModel.value.model]?.length)
     selectedChatId.value = allChats.value[selectedModel.value.model][0].id.toString()
   else
     await createNewChat(selectedModel.value.model)
+}
+
+function cancelDeleteChat() {
+  confirmDeleteDialog.value = false
+  chatToDelete.value = null
 }
 </script>
 
@@ -167,6 +183,16 @@ async function deleteChat(chat: { id: string }) {
       Logout
     </v-btn>
   </v-row>
+
+  <ConfirmDialog
+    v-model="confirmDeleteDialog"
+    title="Delete chat"
+    message="Are you sure you want to delete this chat? This action cannot be undone."
+    confirm-label="Delete"
+    confirm-color="error"
+    @confirm="confirmDeleteChat"
+    @cancel="cancelDeleteChat"
+  />
 
   <v-container
     style="max-width: 1000px;"

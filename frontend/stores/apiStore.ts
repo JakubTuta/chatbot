@@ -21,6 +21,18 @@ export const useApiStore = defineStore('api', () => {
     return Promise.reject(error)
   })
 
+  api.value.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        const authStore = useAuthStore()
+        authStore.logOut()
+      }
+
+      return Promise.reject(error)
+    },
+  )
+
   const isResponseOk = (response: AxiosResponse | null) => {
     return response !== null && response.status >= 200 && response.status < 300
   }

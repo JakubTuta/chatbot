@@ -47,6 +47,21 @@ def stream_bot_response(
         return
 
 
+def ask_bot(
+    model: models.AIModel,
+    parameters: str,
+    message: str,
+    image: str,
+    history: typing.List[typing.Dict[str, str]],
+) -> typing.Optional[str]:
+    chunks = []
+    for chunk in stream_bot_response(model, parameters, message, image, history):
+        if chunk:
+            chunks.append(chunk)
+
+    return "".join(chunks) if chunks else None
+
+
 def stream_structured_bot_response(
     model: models.AIModel,
     parameters: str,
