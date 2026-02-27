@@ -18,6 +18,16 @@
 
 ---
 
+## Screenshots
+
+![Landing page](screenshots/1.png)
+
+![Model management](screenshots/2.png)
+
+![Chat interface](screenshots/3.png)
+
+---
+
 ## Quick Start (Docker — recommended)
 
 ### Prerequisites
