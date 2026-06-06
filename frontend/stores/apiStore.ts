@@ -7,26 +7,23 @@ export const useApiStore = defineStore('api', () => {
 
   const api = ref(axios.create({
     baseURL,
+    timeout: 15000,
   }))
 
-  api.value.interceptors.request.use((config) => {
-    const accessToken = localStorage.getItem(ACCESS_TOKEN)
-
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`
-    }
-
-    return config
-  }, (error) => {
-    return Promise.reject(error)
-  })
-
   api.value.interceptors.response.use(
-    (response) => response,
+    response => response,
     (error) => {
-      if (error.response?.status === 401) {
-        const authStore = useAuthStore()
-        authStore.logOut()
+      if (error.response?.status >= 500) {
+        const snackbarStore = useSnackbarStore()
+        snackbarStore.showSnackbarError('Server error — please try again later.')
+      }
+      else if (error.code === 'ECONNABORTED') {
+        const snackbarStore = useSnackbarStore()
+        snackbarStore.showSnackbarError('Request timed out — check your connection.')
+      }
+      else if (!error.response && error.code === 'ERR_NETWORK') {
+        const snackbarStore = useSnackbarStore()
+        snackbarStore.showSnackbarError('Network error — server may be down.')
       }
 
       return Promise.reject(error)

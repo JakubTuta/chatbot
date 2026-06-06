@@ -55,11 +55,11 @@ The defaults in `.env.example` work out of the box for a local Docker setup. You
 docker-compose up -d
 ```
 
-| Service  | URL                      |
-|----------|--------------------------|
-| Frontend | http://localhost:3000    |
-| Backend  | http://localhost:8000    |
-| MongoDB  | localhost:27017          |
+| Service    | URL                      |
+|------------|--------------------------|
+| Frontend   | http://localhost:3000    |
+| Backend    | http://localhost:8000    |
+| PostgreSQL | localhost:5432           |
 
 ### GPU support (optional, increases model performance)
 
@@ -98,22 +98,14 @@ SERVER_URL="http://localhost:8000"
 DATABASE_USERNAME="admin"
 DATABASE_PASSWORD="password"
 DATABASE_NAME="chatbot"
-DATABASE_PORT="27017"
-MONGO_CONTAINER_NAME="mongodb"
-LOCAL_DATABASE_HOST="mongodb://admin:password@localhost:27017/?retryWrites=true&w=majority&appName=chatbot"
-DOCKER_DATABASE_HOST="mongodb://admin:password@mongodb/?retryWrites=true&w=majority&appName=chatbot"
+DATABASE_PORT="5432"
+LOCAL_DATABASE_HOST="localhost"
 ```
 
-First-time setup (run once):
+Run migrations and start the server:
 
 ```bash
-python replace_context.py
 python manage.py migrate
-```
-
-Start the server:
-
-```bash
 python manage.py runserver
 ```
 
@@ -138,14 +130,13 @@ Frontend is available at `http://localhost:3000`.
 | `SECRET_KEY`              | Yes      | —             | Django secret key. Generate at https://djecrety.ir/     |
 | `DEBUG`                   | No       | `false`       | Set to `true` for local development                      |
 | `SERVER_URL`              | No       | `http://localhost:8000` | Base URL of the backend (used during model scraping) |
-| `DATABASE_USERNAME`       | Yes      | —             | MongoDB username                                         |
-| `DATABASE_PASSWORD`       | Yes      | —             | MongoDB password                                         |
-| `DATABASE_NAME`           | Yes      | —             | MongoDB database name                                    |
-| `DATABASE_PORT`           | Yes      | `27017`       | MongoDB port                                             |
-| `MONGO_CONTAINER_NAME`    | No       | `mongodb`     | MongoDB container hostname (Docker networking)           |
-| `LOCAL_DATABASE_HOST`     | No*      | —             | MongoDB connection string for local development          |
-| `DOCKER_DATABASE_HOST`    | No*      | —             | MongoDB connection string when running inside Docker     |
-| `PRODUCTION_DATABASE_HOST`| No       | —             | MongoDB Atlas or remote connection string                |
+| `DATABASE_USERNAME`       | Yes      | —             | PostgreSQL username                                      |
+| `DATABASE_PASSWORD`       | Yes      | —             | PostgreSQL password                                      |
+| `DATABASE_NAME`           | Yes      | —             | PostgreSQL database name                                 |
+| `DATABASE_PORT`           | No       | `5432`        | PostgreSQL port                                          |
+| `LOCAL_DATABASE_HOST`     | No*      | —             | PostgreSQL hostname for local development                |
+| `DOCKER_DATABASE_HOST`    | No*      | —             | PostgreSQL hostname when running inside Docker           |
+| `PRODUCTION_DATABASE_HOST`| No       | —             | Managed PostgreSQL hostname for production               |
 | `IS_PRODUCTION`           | No       | `false`       | Set to `true` to use `PRODUCTION_DATABASE_HOST`          |
 | `ALLOWED_HOSTS`           | No       | `*`           | Comma-separated list of allowed host headers             |
 | `CORS_ALLOW_ALL_ORIGINS`  | No       | `true`        | Set to `false` and configure `CORS_ALLOWED_ORIGINS` for production |

@@ -231,7 +231,7 @@ def can_process_images(text):
     return any(word in text.lower() for word in key_words)
 
 
-def scrape_ollama(min_pull_count: int) -> bool:
+def scrape_ollama(min_pull_count: int, progress_cb=None) -> bool:
     base_url = "https://ollama.com/library/"
 
     headers = {
@@ -248,8 +248,10 @@ def scrape_ollama(min_pull_count: int) -> bool:
     models = soup.find_all("h2")
     models.pop(0)
 
+    total_models = len(models)
     model_index = 1
     processed_models = set()
+    completed_count = 0
 
     for model in models:
         title = model.get_text().strip()
@@ -322,6 +324,9 @@ def scrape_ollama(min_pull_count: int) -> bool:
             continue
 
         model_index += 1
+        completed_count += 1
+        if progress_cb is not None:
+            progress_cb(completed_count, total_models, title)
 
     return True
 

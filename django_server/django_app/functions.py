@@ -1,15 +1,21 @@
 import json
+import logging
 import os
 import typing
 
 import requests
 from container.ContainerManager import ContainerManager
-from django.contrib.auth.models import User
 from django.db.models.manager import BaseManager
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
 
 from . import models, serializers
+
+logger = logging.getLogger(__name__)
+
+
+class ModelUnavailableError(Exception):
+    pass
 
 
 def stream_bot_response(
@@ -21,7 +27,10 @@ def stream_bot_response(
 ) -> typing.Generator[str, None, None]:
     url_info = _get_ollama_url(model.model, parameters)
     if url_info is None:
-        return None
+        raise ModelUnavailableError(
+            "Model container isn't running or is still pulling. "
+            "Check the Models page and try again once it shows 'Running'."
+        )
 
     base_url, full_model_string = url_info
 
@@ -43,8 +52,14 @@ def stream_bot_response(
         for chunk in llm.stream(messages):
             yield chunk.text()
 
-    except requests.exceptions.RequestException:
-        return
+    except requests.exceptions.ConnectionError as e:
+        raise ModelUnavailableError(
+            "Could not reach the model — it may still be starting up. Try again in a moment."
+        ) from e
+    except requests.exceptions.RequestException as e:
+        raise ModelUnavailableError(
+            f"Network error communicating with model: {e}"
+        ) from e
 
 
 def ask_bot(
@@ -55,10 +70,12 @@ def ask_bot(
     history: typing.List[typing.Dict[str, str]],
 ) -> typing.Optional[str]:
     chunks = []
-    for chunk in stream_bot_response(model, parameters, message, image, history):
-        if chunk:
-            chunks.append(chunk)
-
+    try:
+        for chunk in stream_bot_response(model, parameters, message, image, history):
+            if chunk:
+                chunks.append(chunk)
+    except ModelUnavailableError:
+        raise
     return "".join(chunks) if chunks else None
 
 
@@ -74,7 +91,10 @@ def stream_structured_bot_response(
 ) -> typing.Optional[str]:
     url_info = _get_ollama_url(model.model, parameters)
     if url_info is None:
-        return None
+        raise ModelUnavailableError(
+            "Model container isn't running or is still pulling. "
+            "Check the Models page and try again once it shows 'Running'."
+        )
 
     base_url, full_model_string = url_info
 
@@ -117,8 +137,18 @@ Your response should be valid JSON only, with no other text or explanation."""
 
         return f"```json\n{json_string}\n```"
 
+    except ModelUnavailableError:
+        raise
+    except requests.exceptions.ConnectionError as e:
+        raise ModelUnavailableError(
+            "Could not reach the model — it may still be starting up. Try again in a moment."
+        ) from e
+    except requests.exceptions.RequestException as e:
+        raise ModelUnavailableError(
+            f"Network error communicating with model: {e}"
+        ) from e
     except Exception as e:
-        print(f"Error in structured bot response: {str(e)}")
+        logger.exception("Error in structured bot response")
         return None
 
 
@@ -202,6 +232,12 @@ def _create_base_messages(message, image, history):
 
 def _get_ollama_url(model_name, parameters):
     container_manager = ContainerManager()
+
+    if container_manager.is_model_pulling(model_name, parameters):
+        raise ModelUnavailableError(
+            "The model is still being pulled. Wait for it to finish on the Models page, then try again."
+        )
+
     container_port = container_manager.get_container_port(model_name, parameters)
 
     if container_port is None:
@@ -215,21 +251,18 @@ def _get_ollama_url(model_name, parameters):
     return base_url, full_model_string
 
 
-def create_message(role: str, message: str, image: str = "") -> models.Message:
-    data_dict = {"role": role, "content": message}
-
-    if role == "user" and image:
-        data_dict["image"] = image
-
-    serializer = serializers.MessageSerializer(data=data_dict)
-    serializer.is_valid(raise_exception=True)
-
-    model = models.Message.objects.create(**serializer.validated_data)  # type: ignore
-
-    return model
+def create_chat_message(
+    chat_history: models.ChatHistory, role: str, content: str, image: str = ""
+) -> models.ChatMessage:
+    return models.ChatMessage.objects.create(
+        chat=chat_history,
+        role=role,
+        content=content,
+        image=image if role == "user" else "",
+    )
 
 
-def deserialize_messages(messages: list[models.Message]) -> list[dict[str, str]]:
+def deserialize_messages(messages) -> list[dict[str, str]]:
     return [
         {
             "role": str(message.role),
@@ -240,12 +273,12 @@ def deserialize_messages(messages: list[models.Message]) -> list[dict[str, str]]
     ]
 
 
-def get_chats_for_user(
-    user: User, model: models.AIModel, sort: bool = False
+def get_chats(
+    model: models.AIModel, sort: bool = False
 ) -> BaseManager[models.ChatHistory]:
     chats: BaseManager[models.ChatHistory] = models.ChatHistory.objects.filter(
-        user=user
-    ).filter(ai_model=model)
+        ai_model=model
+    )
 
     if sort:
         chats = chats.order_by("-last_update_time")
@@ -253,46 +286,38 @@ def get_chats_for_user(
     return chats
 
 
-def get_chat_history_for_user(
-    user: User, model: typing.Optional[models.AIModel], chat_id: str
+def get_chat_history(
+    model: typing.Optional[models.AIModel], chat_id: str
 ) -> models.ChatHistory | None:
     if model is None:
-        return
+        return None
 
-    chats: BaseManager[models.ChatHistory] = get_chats_for_user(user, model)
+    return get_chats(model).filter(id=chat_id).first()
 
-    return chats.filter(id=chat_id).first()
+
+def get_messages_for_chat(chat_history: models.ChatHistory) -> BaseManager[models.ChatMessage]:
+    return models.ChatMessage.objects.filter(chat=chat_history).order_by("created_at")
 
 
 def add_messages_to_history(
-    user: User,
     model: models.AIModel,
     chat_history: models.ChatHistory | None,
-    messages: list[models.Message],
+    user_content: str,
+    assistant_content: str,
+    image: str = "",
 ) -> None:
-    if chat_history:
-        chat_history.history.extend(messages)
-        chat_history.save()
+    if chat_history is None:
+        chat_history = models.ChatHistory.objects.create(ai_model=model)
 
-    else:
-        chat_history_data: dict[str, typing.Any] = {
-            "user": user,
-            "ai_model": model,
-            "history": messages,
-        }
-
-        chat_history = models.ChatHistory.objects.create(**chat_history_data)
-        chat_history.save()
+    models.ChatMessage.objects.create(chat=chat_history, role="user", content=user_content, image=image)
+    models.ChatMessage.objects.create(chat=chat_history, role="assistant", content=assistant_content)
+    chat_history.save()  # triggers auto_now on last_update_time
 
 
 def get_version_by_parameters(
     model: models.AIModel, parameters: str
 ) -> models.AIModelVersion | None:
-    versions = model.versions
-
-    return next(
-        (version for version in versions if version.parameters == parameters), None
-    )
+    return model.versions.filter(parameters=parameters).first()
 
 
 def get_ai_model(value: str) -> typing.Optional[models.AIModel]:

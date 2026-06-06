@@ -1,8 +1,12 @@
 <script setup lang="ts">
-definePageMeta({ middleware: ['auth'] })
+import { useDisplay } from 'vuetify'
+import { useThemeToggle } from '~/composables/useTheme'
+
+const { isDark, toggleTheme } = useThemeToggle()
+const { mobile } = useDisplay()
 
 const loading = ref(false)
-const isShowDrawer = ref(false)
+const isShowDrawer = ref(!mobile.value)
 const temporaryChatTitle = ref('')
 const changingChatTitleId = ref('')
 const loadingChangeChatTitle = ref(false)
@@ -13,19 +17,13 @@ const forceReset = ref(false)
 const confirmDeleteDialog = ref(false)
 const chatToDelete = ref<{ id: string } | null>(null)
 
-const authStore = useAuthStore()
-const { user } = storeToRefs(authStore)
-
 const chatStore = useChatStore()
 const { aiModels, allChats } = storeToRefs(chatStore)
 
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
 
-watch(user, async (newValue) => {
-  if (!newValue)
-    return
-
+onMounted(async () => {
   loading.value = true
 
   if (!aiModels.value.length)
@@ -34,8 +32,14 @@ watch(user, async (newValue) => {
   if (!containers.value.length)
     await containerStore.getUserContainers()
 
+  containerStore.startPolling()
+
   loading.value = false
-}, { immediate: true })
+})
+
+onUnmounted(() => {
+  containerStore.stopPolling()
+})
 
 watch(selectedChatId, async (newChatId, oldChatId) => {
   if (!newChatId || !selectedModel.value || newChatId === oldChatId)
@@ -54,11 +58,14 @@ watch(allChats, (newValue) => {
     return
 
   const chats = newValue[selectedModel.value.model]
+  const currentValid = chats.some(c => c.id.toString() === selectedChatId.value)
 
-  if (chats.length)
-    selectedChatId.value = chats[0].id.toString()
-  else
-    createNewChat(selectedModel.value.model)
+  if (!currentValid) {
+    if (chats.length)
+      selectedChatId.value = chats[0].id.toString()
+    else
+      createNewChat(selectedModel.value.model)
+  }
 }, { deep: true })
 
 function softReset() {
@@ -70,6 +77,8 @@ function softReset() {
 
 function changeChat(chat: any) {
   selectedChatId.value = chat.id.toString()
+  if (mobile.value)
+    isShowDrawer.value = false
 }
 
 function changeChatTitle(chat: { id: string, title: string }) {
@@ -144,45 +153,152 @@ function cancelDeleteChat() {
 </script>
 
 <template>
-  <v-row
-    class="mx-4 mt-2"
-    style="position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between"
+  <v-app-bar
+    flat
+    elevation="0"
+    border="b"
+    class="frosted-bar"
   >
-    <v-btn
-      v-show="!loading && selectedModel && !isShowDrawer"
+    <v-app-bar-nav-icon
+      v-if="selectedModel"
       @click="isShowDrawer = !isShowDrawer"
-    >
-      Show chats
-      <v-icon
-        size="x-large"
-        icon="mdi-chevron-right"
-        class="ml-2"
+    />
+
+    <v-app-bar-title>
+      <span class="app-title">OllamaChat</span>
+    </v-app-bar-title>
+
+    <template #append>
+      <v-btn
+        variant="text"
+        rounded="xl"
+        to="/"
+      >
+        Home
+      </v-btn>
+
+      <v-btn
+        variant="text"
+        rounded="xl"
+        to="/models"
+        class="mr-1"
+      >
+        Models
+      </v-btn>
+
+      <v-btn
+        icon
+        variant="text"
+        :title="isDark
+          ? 'Switch to light mode'
+          : 'Switch to dark mode'"
+        @click="toggleTheme"
+      >
+        <v-icon>
+          {{ isDark
+            ? 'mdi-weather-sunny'
+            : 'mdi-weather-night' }}
+        </v-icon>
+      </v-btn>
+    </template>
+  </v-app-bar>
+
+  <v-navigation-drawer
+    v-if="selectedModel"
+    v-model="isShowDrawer"
+    :temporary="mobile"
+    width="280"
+    class="chat-drawer"
+  >
+    <div class="align-center d-flex justify-space-between px-4 pb-2 pt-4">
+      <span class="text-medium-emphasis font-weight-medium text-caption drawer-label tracking-widest">
+        CONVERSATIONS
+      </span>
+
+      <v-btn
+        icon="mdi-plus"
+        variant="text"
+        size="small"
+        title="New chat"
+        class="new-chat-btn"
+        @click="createNewChat(selectedModel!.model)"
       />
-    </v-btn>
+    </div>
 
-    <v-spacer />
+    <v-divider />
 
-    <v-btn
-      class="mr-4"
-      to="/"
+    <v-list
+      density="compact"
+      nav
+      class="px-2 pt-2"
     >
-      Main page
-    </v-btn>
+      <v-list-item
+        v-for="chat in allChats[selectedModel.model] || []"
+        :key="chat.id"
+        :ripple="!isChangingMyTitle(chat)"
+        :active="selectedChatId === chat.id.toString()"
+        active-color="primary"
+        rounded="lg"
+        min-height="44"
+        class="chat-list-item"
+        :class="{'chat-list-item--active': selectedChatId === chat.id.toString()}"
+        @click="changeChat(chat)"
+      >
+        <template #title>
+          <v-text-field
+            v-if="isChangingMyTitle(chat)"
+            v-model="temporaryChatTitle"
+            :loading="loadingChangeChatTitle"
+            density="compact"
+            variant="plain"
+            hide-details
+            autofocus
+            @keydown.enter="acceptChangeChatTitle(chat)"
+            @keydown.esc="cancelChangeChatTitle"
+            @keydown.space.prevent="addSpace"
+          />
 
-    <v-btn
-      class="mr-4"
-      to="/models"
-    >
-      Models
-    </v-btn>
+          <span
+            v-else
+            class="d-block text-truncate"
+            style="max-width: 152px; font-size: 0.875rem"
+          >
+            {{ chat.title }}
+          </span>
+        </template>
 
-    <v-btn
-      v-show="!loading && user"
-      @click="authStore.logOut()"
-    >
-      Logout
-    </v-btn>
-  </v-row>
+        <template #append>
+          <template v-if="!isChangingMyTitle(chat)">
+            <v-btn
+              icon="mdi-pencil"
+              variant="text"
+              size="x-small"
+              class="drawer-action-btn"
+              @click.stop="changeChatTitle(chat)"
+            />
+
+            <v-btn
+              icon="mdi-delete"
+              variant="text"
+              size="x-small"
+              color="error"
+              class="drawer-action-btn"
+              @click.stop="deleteChat(chat)"
+            />
+          </template>
+
+          <v-btn
+            v-else
+            icon="mdi-close"
+            variant="text"
+            size="x-small"
+            color="error"
+            @click.stop="cancelChangeChatTitle()"
+          />
+        </template>
+      </v-list-item>
+    </v-list>
+  </v-navigation-drawer>
 
   <ConfirmDialog
     v-model="confirmDeleteDialog"
@@ -194,108 +310,104 @@ function cancelDeleteChat() {
     @cancel="cancelDeleteChat"
   />
 
-  <v-container
-    style="max-width: 1000px;"
-    class="fill-height"
-  >
-    <v-navigation-drawer
-      v-if="!loading && selectedModel"
-      v-model="isShowDrawer"
-      width="350"
+  <div class="chat-page-content">
+    <div
+      v-if="loading"
+      class="d-flex align-center justify-center"
+      style="height: 100%"
     >
-      <v-list-item class="mb-5 mt-3">
-        <v-btn
-          block
-          @click="isShowDrawer = !isShowDrawer"
-        >
-          <v-icon
-            size="x-large"
-            icon="mdi-chevron-left"
-            class="mr-2"
-          />
-          Close chats
-        </v-btn>
-      </v-list-item>
+      <v-progress-circular indeterminate />
+    </div>
 
-      <v-list-item
-        v-for="chat in allChats[selectedModel.model] || []"
-        :key="chat.id"
-        :title="isChangingMyTitle(chat)
-          ? ''
-          : chat.title"
-        :ripple="!isChangingMyTitle(chat)"
-        :active="selectedChatId === chat.id.toString()"
-        @click="changeChat(chat)"
-      >
-        <v-text-field
-          v-if="isChangingMyTitle(chat)"
-          v-model="temporaryChatTitle"
-          :loading="loadingChangeChatTitle"
-          autofocus
-          density="comfortable"
-          @keydown.enter="acceptChangeChatTitle(chat)"
-          @keydown.esc="cancelChangeChatTitle"
-          @keydown.space="addSpace"
-        />
+    <template v-else>
+      <SystemStatusBanner class="chat-page-banner" />
 
-        <template #append>
-          <v-btn
-            v-if="!isChangingMyTitle(chat)"
-            variant="text"
-            icon="mdi-pencil"
-            @click="changeChatTitle(chat)"
-          />
-
-          <v-btn
-            v-if="!isChangingMyTitle(chat)"
-            variant="text"
-            icon="mdi-delete"
-            color="error"
-            @click="deleteChat(chat)"
-          />
-
-          <v-btn
-            v-if="isChangingMyTitle(chat)"
-            variant="text"
-            icon="mdi-close"
-            color="error"
-            class="mb-6"
-            @click="cancelChangeChatTitle()"
-          />
-        </template>
-      </v-list-item>
-
-      <v-list-item class="mt-5">
-        <v-btn
-          block
-          @click="createNewChat(selectedModel.model)"
-        >
-          Create new chat
-
-          <v-icon
-            size="x-large"
-            icon="mdi-plus"
-            color="success"
-            class="ml-2"
-          />
-        </v-btn>
-      </v-list-item>
-    </v-navigation-drawer>
-
-    <v-card v-if="loading">
-      <v-skeleton-loader
-        class="mx-auto"
-        height="250"
-        width="100%"
+      <ChatCard
+        v-model:selected-model="selectedModel"
+        :reset="forceReset"
+        :selected-chat-id="selectedChatId"
+        @soft-reset="softReset"
       />
-    </v-card>
-
-    <ChatCard
-      v-else
-      v-model:selected-model="selectedModel"
-      :reset="forceReset"
-      :selected-chat-id="selectedChatId"
-      @soft-reset="softReset"
-    />
-  </v-container>
+    </template>
+  </div>
 </template>
+
+<style scoped>
+/* Frosted app bar */
+.frosted-bar {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--v-theme-surface), 0.82) !important;
+}
+
+/* Gradient app title */
+.app-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366F1, #818CF8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Drawer */
+.chat-drawer {
+  background: rgb(var(--v-theme-surface)) !important;
+}
+
+.drawer-label {
+  letter-spacing: 0.08em;
+}
+
+.new-chat-btn {
+  color: #6366F1 !important;
+  transition: transform 0.5s ease;
+}
+
+.new-chat-btn:hover {
+  transform: rotate(90deg);
+}
+
+/* Chat list items */
+.chat-list-item {
+  transition: background-color 0.15s ease;
+}
+
+.chat-list-item--active {
+  border-left: 2px solid #6366F1;
+}
+
+/* Hide action buttons until hover */
+.drawer-action-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.chat-list-item:hover .drawer-action-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Always show on touch */
+@media (hover: none) {
+  .drawer-action-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Chat page layout */
+.chat-page-content {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 64px);
+  padding: 12px 24px 16px;
+  overflow: hidden;
+}
+
+.chat-page-banner {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+</style>

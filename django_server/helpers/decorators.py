@@ -1,7 +1,10 @@
+import logging
 from functools import wraps
 
 from django.http import JsonResponse
 from rest_framework.request import Request
+
+logger = logging.getLogger(__name__)
 
 
 def required_query_params(required_params):
@@ -101,7 +104,7 @@ def required_body_params(required_params):
                 return view_func(*args, **kwargs)
 
             except AttributeError as e:
-                print(e)
+                logger.warning("Invalid request body in decorator: %s", e)
                 return JsonResponse(
                     {"error": "Invalid request body"},
                     status=400,

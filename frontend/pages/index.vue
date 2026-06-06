@@ -12,7 +12,7 @@
         </p>
 
         <div class="action-buttons">
-          <NuxtLink to="/auth/login">
+          <NuxtLink to="/chat">
             <v-btn
               color="primary"
               size="large"
@@ -106,6 +106,89 @@
       </div>
     </div>
 
+    <!-- How It Works Section -->
+    <div class="how-section">
+      <h2 class="section-title">
+        Get started in 3 steps
+      </h2>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">
+            1
+          </div>
+
+          <v-icon
+            size="32"
+            color="primary"
+            class="mb-3"
+          >
+            mdi-docker
+          </v-icon>
+
+          <h3>Install &amp; start Docker</h3>
+
+          <p>Download Docker Desktop and start it. The app uses Docker to run AI models in isolated containers.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">
+            2
+          </div>
+
+          <v-icon
+            size="32"
+            color="primary"
+            class="mb-3"
+          >
+            mdi-download
+          </v-icon>
+
+          <h3>Pull a model</h3>
+
+          <p>
+            Go to the <NuxtLink
+              to="/models"
+              class="step-link"
+            >
+              Models page
+            </NuxtLink>
+
+            , pick a model (e.g. <em>llama3</em>
+
+            ), select a version and click <strong>Create container</strong>. The model downloads automatically.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">
+            3
+          </div>
+
+          <v-icon
+            size="32"
+            color="primary"
+            class="mb-3"
+          >
+            mdi-chat
+          </v-icon>
+
+          <h3>Start chatting</h3>
+
+          <p>
+            Once the container shows <strong>Running</strong>
+
+            , head to the <NuxtLink
+              to="/chat"
+              class="step-link"
+            >
+              Chat page
+            </NuxtLink> — your model will be ready and waiting.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Call to Action Section -->
     <div class="cta-section">
       <div class="cta-content">
@@ -114,31 +197,21 @@
         <p>Join our community and explore the power of local AI conversations.</p>
 
         <div class="cta-buttons">
-          <NuxtLink to="/auth/login">
+          <NuxtLink to="/chat">
             <v-btn
               color="primary"
               class="mx-2"
             >
-              Login
+              Open Chat
             </v-btn>
           </NuxtLink>
 
-          <NuxtLink to="/auth/register">
+          <NuxtLink to="/models">
             <v-btn
               color="secondary"
               class="mx-2"
             >
-              Register
-            </v-btn>
-          </NuxtLink>
-
-          <NuxtLink to="/chat">
-            <v-btn
-              variant="tonal"
-              color="primary"
-              class="mx-2"
-            >
-              Try Chat
+              Browse Models
             </v-btn>
           </NuxtLink>
         </div>
@@ -297,6 +370,67 @@
 .feature-card p {
   color: #b0b0b0;
   line-height: 1.6;
+}
+
+/* How It Works Section */
+.how-section {
+  padding: 5rem 8%;
+  text-align: center;
+  background: #181818;
+}
+
+.steps-grid {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.step-card {
+  background: #1e1e1e;
+  padding: 2rem;
+  border-radius: 16px;
+  width: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.step-number {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.step-card h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+  color: #e0e0e0;
+}
+
+.step-card p {
+  color: #b0b0b0;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.step-link {
+  color: #a9c2ff;
+  text-decoration: none;
+}
+
+.step-link:hover {
+  text-decoration: underline;
 }
 
 /* CTA Section */

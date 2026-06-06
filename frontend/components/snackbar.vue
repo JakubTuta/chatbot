@@ -2,27 +2,30 @@
 import { useSnackbarStore } from '~/stores/snackbarStore'
 
 const snackbarStore = useSnackbarStore()
-const { isShow, text, color } = storeToRefs(snackbarStore)
-
-const timeout = ref(5000)
-
-watch(isShow, (newValue) => {
-  if (newValue) {
-    setTimeout(() => {
-      isShow.value = false
-    }, timeout.value)
-  }
-})
+const { isShow, current } = storeToRefs(snackbarStore)
 </script>
 
 <template>
   <v-snackbar
-    :color="color || ''"
+    :color="current?.color || ''"
     :model-value="isShow"
-    :timeout="timeout"
+    :timeout="5000"
+    location="bottom right"
+    @update:model-value="(v) => {
+      if (!v) snackbarStore.dismiss()
+    }"
   >
-    <div class="text-center">
-      {{ text }}
+    <div>
+      {{ current?.text }}
     </div>
+
+    <template #actions>
+      <v-btn
+        variant="text"
+        icon="mdi-close"
+        size="small"
+        @click="snackbarStore.dismiss()"
+      />
+    </template>
   </v-snackbar>
 </template>

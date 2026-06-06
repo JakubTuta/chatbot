@@ -1,31 +1,23 @@
 services:
-  mongodb:
-    image: mongo
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - 27017:27017
+      - 5432:5432
     networks:
       - default
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=chatbot
     volumes:
-      - mongodb-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d chatbot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     pull_policy: always
 
-  # mongo-express:
-  #   image: mongo-express
-  #   ports:
-  #     - 8081:8081
-  #   networks:
-  #     - default
-  #   environment:
-  #     - ME_CONFIG_MONGODB_SERVER=mongodb
-  #     - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-  #     - ME_CONFIG_MONGODB_ADMINPASSWORD=password
-  #     - ME_CONFIG_BASICAUTH_USERNAME=admin
-  #     - ME_CONFIG_BASICAUTH_PASSWORD=password
-  #   pull_policy: always
-  
   server:
     build:
       context: django_server
@@ -36,8 +28,11 @@ services:
       - default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
     pull_policy: build
-  
+
   frontend:
     build:
       context: frontend
@@ -49,7 +44,7 @@ services:
     pull_policy: build
 
 volumes:
-  mongodb-data:
+  postgres-data:
     driver: local
 
 networks:

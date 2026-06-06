@@ -1,6 +1,8 @@
 <script setup lang="ts">
-const authStore = useAuthStore()
-authStore.init()
+import { useThemeToggle } from '~/composables/useTheme'
+
+const { initTheme } = useThemeToggle()
+initTheme()
 </script>
 
 <template>

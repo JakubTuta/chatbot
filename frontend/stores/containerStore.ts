@@ -1,3 +1,6 @@
+import type { ContainerSocketMessage, ContainerSocketWrapper, PullProgressInfo, ScrapeProgressInfo } from '~/constants/containerSocket'
+import { getContainerSocket } from '~/constants/containerSocket'
+
 export type ContainerStatus = 'running' | 'exited' | 'paused' | 'restarting' | 'pulling_model'
 
 export interface Container {
@@ -14,10 +17,126 @@ export const useContainerStore = defineStore('container', () => {
 
   const containers = ref<Container[]>([])
   const loadingOperation = ref<string | null>(null)
+  const pullProgress = ref<Record<string, PullProgressInfo>>({})
+  const scrapeProgress = ref<ScrapeProgressInfo>({
+    running: false,
+    total: null,
+    completed: 0,
+    current: null,
+    error: null,
+  })
+
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
+  let socket: ContainerSocketWrapper | null = null
+  let socketConnected = false
+  const POLL_INTERVAL_MS = 3000
 
   const resetState = () => {
     containers.value = []
     loadingOperation.value = null
+    pullProgress.value = {}
+    stopPolling()
+  }
+
+  const shouldPoll = () => !socketConnected
+    && containers.value.some(c => c.status === 'pulling_model' || c.status === 'restarting')
+
+  function stopPolling() {
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  function scheduleNextPoll() {
+    stopPolling()
+    if (shouldPoll()) {
+      pollTimer = setTimeout(async () => {
+        await getUserContainers()
+        scheduleNextPoll()
+      }, POLL_INTERVAL_MS)
+    }
+  }
+
+  function startPolling() {
+    if (shouldPoll() && pollTimer === null)
+      scheduleNextPoll()
+  }
+
+  function connectSocket() {
+    if (socket)
+      return
+
+    socket = getContainerSocket({
+      onConnect: () => {
+        socketConnected = true
+        stopPolling()
+      },
+      onDisconnect: () => {
+        socketConnected = false
+      },
+      onReconnecting: (_attempt: number) => {
+        socketConnected = false
+      },
+      onMaxReconnectFailed: () => {
+        socketConnected = false
+        startPolling()
+      },
+      onMessage: (data: ContainerSocketMessage) => {
+        switch (data.type) {
+          case 'snapshot':
+            if (data.containers)
+              containers.value = data.containers as Container[]
+            if (data.progress)
+              pullProgress.value = data.progress
+            if (data.scrape)
+              scrapeProgress.value = data.scrape
+            break
+
+          case 'image_pull_progress':
+          case 'model_pull_progress':
+            if (data.container) {
+              pullProgress.value = {
+                ...pullProgress.value,
+                [data.container]: {
+                  phase: data.phase || data.type,
+                  percent: data.percent ?? 0,
+                  detail: data.detail || '',
+                },
+              }
+            }
+            break
+
+          case 'scrape_progress':
+            scrapeProgress.value = {
+              running: data.running ?? false,
+              total: data.total ?? null,
+              completed: data.completed ?? 0,
+              current: data.current ?? null,
+              error: data.error ?? null,
+            }
+            if (!data.running && data.running !== undefined) {
+              useChatStore().fetchAIModels()
+            }
+            break
+
+          case 'container_update':
+            if (data.error && data.container) {
+              snackbarStore.showSnackbarError(`Container error: ${data.error}`)
+            }
+            // Snapshot thread will push updated container list shortly; no manual patch needed
+            break
+        }
+      },
+    })
+  }
+
+  function disconnectSocket() {
+    if (socket) {
+      socket.closeConnection()
+      socket = null
+      socketConnected = false
+    }
   }
 
   const checkDockerConnection = async () => {
@@ -43,6 +162,7 @@ export const useContainerStore = defineStore('container', () => {
 
       if (response.status === 200) {
         containers.value = response.data
+        scheduleNextPoll()
       }
     }
     catch (error: any) {
@@ -60,6 +180,8 @@ export const useContainerStore = defineStore('container', () => {
     try {
       const response = await api.value.post(url, {})
 
+      // 200: existing container started synchronously
+      // 202: new container creation started, progress comes via socket
       if (response.status === 200) {
         await getUserContainers()
       }
@@ -123,11 +245,17 @@ export const useContainerStore = defineStore('container', () => {
   return {
     containers,
     loadingOperation,
+    pullProgress,
+    scrapeProgress,
     resetState,
     checkDockerConnection,
     getUserContainers,
     runContainer,
     stopContainer,
     removeContainer,
+    startPolling,
+    stopPolling,
+    connectSocket,
+    disconnectSocket,
   }
 })

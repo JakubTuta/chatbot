@@ -47,15 +47,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const pullAIModels = async (minPullCount: number) => {
-    const url = `ai-models/?minPullCount=${minPullCount}`
-
     loading.value = true
 
     try {
-      const response = await api.value.put(url)
-
-      if (response.status === 200)
-        await fetchAIModels()
+      await api.value.put(`ai-models/?minPullCount=${minPullCount}`)
+      snackbarStore.showSnackbarInfo('Scraping models in background — progress shown on the page.')
     }
     catch (error: any) {
       console.error(error)

@@ -5,6 +5,7 @@ from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 
 from . import functions
+from .functions import ModelUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +17,6 @@ class ChatConsumer(WebsocketConsumer):
     def connect(self):
         self.room_name = self.scope["url_route"]["kwargs"]["chat_id"]
         self.room_group_name = f"chat_{self.room_name}"
-
-        self.user = self.scope["user"]
-        if self.user.is_anonymous:
-            self.close()
-            return
 
         async_to_sync(self.channel_layer.group_add)(  # type: ignore
             self.room_group_name, self.channel_name
@@ -74,20 +70,25 @@ class ChatConsumer(WebsocketConsumer):
                 if len(image_data) < 2 or len(image_data[1].encode()) > MAX_IMAGE_SIZE_BYTES:
                     raise ValueError("Image exceeds the maximum allowed size of 5 MB.")
 
-            ai_model = functions.get_ai_model(ai_model_value)
-            chat_history = functions.get_chat_history_for_user(
-                self.user, ai_model, self.room_name
-            )
+            if structured_output is not None:
+                if not isinstance(structured_output, list):
+                    raise ValueError("structured_output must be a list.")
+                for i, spec in enumerate(structured_output):
+                    if not isinstance(spec, dict):
+                        raise ValueError(f"structured_output[{i}] must be an object.")
+                    if not isinstance(spec.get("field"), str) or not spec["field"].strip():
+                        raise ValueError(f"structured_output[{i}].field must be a non-empty string.")
+                    if not isinstance(spec.get("type"), str) or not spec["type"].strip():
+                        raise ValueError(f"structured_output[{i}].type must be a non-empty string.")
 
-            if (
-                ai_model is None
-                or chat_history is None
-                or chat_history.user != self.user
-            ):
+            ai_model = functions.get_ai_model(ai_model_value)
+            chat_history = functions.get_chat_history(ai_model, self.room_name)
+
+            if ai_model is None or chat_history is None:
                 raise ValueError("Invalid model or chat history.")
 
             history_messages = functions.deserialize_messages(
-                chat_history.history if chat_history else []
+                functions.get_messages_for_chat(chat_history)
             )
 
             full_response = ""
@@ -109,25 +110,21 @@ class ChatConsumer(WebsocketConsumer):
                 )
 
                 if full_response is None:
-                    self.send(
-                        text_data=json.dumps(
-                            {
-                                "message": "Error: Unable to parse the response.",
-                                "done": True,
-                            }
-                        )
-                    )
+                    self._send_error("Unable to parse the structured response. Try again or adjust the schema.")
                     return
 
-            messages = [
-                functions.create_message("user", user_prompt, image),
-                functions.create_message("assistant", full_response),
-            ]
+            if not full_response:
+                self._send_error("The model returned an empty response. Try again.")
+                return
+
             functions.add_messages_to_history(
-                self.user, ai_model, chat_history, messages
+                ai_model, chat_history, user_prompt, full_response, image
             )
             self.send(text_data=json.dumps({"message": full_response, "done": True}))
 
+        except ModelUnavailableError as e:
+            logger.warning("Model unavailable in WebSocket receive: %s", e)
+            self._send_error(str(e))
         except ValueError as e:
             logger.warning("Validation error in WebSocket receive: %s", e)
             self._send_error(str(e))

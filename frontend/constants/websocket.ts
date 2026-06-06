@@ -33,27 +33,19 @@ const RECONNECT_BASE_DELAY_MS = 1000
 const RECONNECT_MAX_DELAY_MS = 30_000
 const RECONNECT_MAX_ATTEMPTS = 8
 
-export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSocketWrapper | null {
+export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSocketWrapper {
   const runtimeConfig = useRuntimeConfig()
   const baseURL = runtimeConfig.public.serverUrl
 
   const url = new URL(baseURL)
   const socketHost = url.host
 
-  const token = localStorage.getItem(ACCESS_TOKEN)
-
-  if (!token) {
-    console.warn('No access token found in local storage.')
-
-    return null
-  }
-
   let reconnectAttempts = 0
   let intentionallyClosed = false
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   function buildSocket(): WebSocket {
-    const ws = new WebSocket(`ws://${socketHost}/ws/chat/${roomId}/?token=${localStorage.getItem(ACCESS_TOKEN) || token}`)
+    const ws = new WebSocket(`ws://${socketHost}/ws/chat/${roomId}/`)
 
     ws.addEventListener('open', () => {
       reconnectAttempts = 0
@@ -104,6 +96,7 @@ export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSo
 
         if (data.error) {
           handlers.onError?.(data.error)
+
           return
         }
 

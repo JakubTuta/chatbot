@@ -10,7 +10,6 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
-import datetime
 import os
 import os.path as path
 from pathlib import Path
@@ -42,13 +41,20 @@ load_dotenv()
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
+IS_PRODUCTION = os.getenv("IS_PRODUCTION", "false") == "true"
+
+if IS_PRODUCTION and not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable must be set in production.")
+
+if not SECRET_KEY:
+    SECRET_KEY = "django-insecure-dev-only-key-change-in-production"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "true").lower() == "true"
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true"
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
@@ -57,17 +63,11 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOWS_CREDENTIALS = True
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "rest_framework.permissions.AllowAny",
     ],
-}
-
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": datetime.timedelta(hours=1),
-    "REFRESH_TOKEN_LIFETIME": datetime.timedelta(weeks=1),
+    "UNAUTHENTICATED_USER": None,
 }
 
 # Application definition
@@ -76,19 +76,13 @@ INSTALLED_APPS = [
     # Third-party apps
     "corsheaders",
     "rest_framework",
-    "rest_framework_simplejwt",
     "channels",
     "daphne",
     # Django apps
-    "django.contrib.admin",
-    "django.contrib.auth",
     "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
     "django.contrib.staticfiles",
     # My apps
     "django_app",
-    "django_auth",
     "container",
 ]
 
@@ -103,11 +97,8 @@ CHANNEL_LAYERS = {
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
 ]
@@ -123,8 +114,6 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.debug",
                 "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
@@ -138,7 +127,6 @@ LOCAL_DATABASE_HOST = os.getenv("LOCAL_DATABASE_HOST")
 DOCKER_DATABASE_HOST = os.getenv("DOCKER_DATABASE_HOST")
 PRODUCTION_DATABASE_HOST = os.getenv("PRODUCTION_DATABASE_HOST")
 
-IS_PRODUCTION = os.getenv("IS_PRODUCTION", "false") == "true"
 IS_DOCKER = os.getenv("DOCKER", "false") == "true"
 
 if IS_PRODUCTION and PRODUCTION_DATABASE_HOST:
@@ -152,35 +140,16 @@ else:
 
 DATABASES = {
     "default": {
-        "ENGINE": "djongo",
+        "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("DATABASE_NAME"),
         "HOST": DATABASE_HOST,
-        "PORT": int(os.getenv("DATABASE_PORT")),  # type: ignore
-        "USERNAME": os.getenv("DATABASE_USERNAME"),
+        "PORT": int(os.getenv("DATABASE_PORT", "5432")),
+        "USER": os.getenv("DATABASE_USERNAME"),
         "PASSWORD": os.getenv("DATABASE_PASSWORD"),
-        "AUTH_SOURCE": "admin",
-        "AUTH_MECHANISM": "SCRAM-SHA-256",
+        "CONN_MAX_AGE": 600,
+        "CONN_HEALTH_CHECKS": True,
     }
 }
-
-
-# Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
-]
 
 
 # Internationalization
@@ -232,11 +201,6 @@ LOGGING = {
             "propagate": False,
         },
         "container": {
-            "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": False,
-        },
-        "django_auth": {
             "handlers": ["console"],
             "level": "DEBUG",
             "propagate": False,

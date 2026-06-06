@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { WebsocketMessage, WebsocketResponse } from '~/constants/websocket'
 import type { IContainer } from '~/models/container'
-import { useDisplay } from 'vuetify'
+import { marked } from 'marked'
 import { getWebsocket } from '~/constants/websocket'
 
 const props = defineProps<{
@@ -23,19 +23,20 @@ const botResponse = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const websocket = ref<WebSocketWrapper | null>(null)
 const scrollToMe = ref<HTMLDivElement | null>(null)
+const messagesContainer = ref<HTMLDivElement | null>(null)
 const waitingForResponse = ref(false)
 const useStructuredOutput = ref(false)
 const structuredOutputFormat = ref([])
 const isFormValid = ref(false)
 const expandedThoughts = ref<Record<number, boolean>>({})
 const botThoughtsVisible = ref(false)
+const copiedIndex = ref<string | null>(null)
+const showScrollFab = ref(false)
 
-const userMessageColor = '#168AFF'
-const botMessageColor = '#9F33FF'
+const userMessageColor = 'rgb(var(--v-theme-chat-user))'
+const botMessageColor = 'rgb(var(--v-theme-chat-bot))'
 
 const splitMessageCache = new Map<string, ReturnType<typeof splitMessageRaw>>()
-
-const { height, mobile } = useDisplay()
 
 const chatStore = useChatStore()
 const { chatHistoryPerModel, aiModels } = storeToRefs(chatStore)
@@ -46,6 +47,36 @@ const { containers } = storeToRefs(containerStore)
 const snackbarStore = useSnackbarStore()
 
 const isReconnecting = ref(false)
+
+const suggestions = [
+  'Explain quantum computing simply',
+  'Write a Python quicksort function',
+  'Give me some productivity tips',
+  'Summarize the history of the internet',
+]
+
+const modelStatusLabel = computed(() => {
+  if (!selectedModel.value)
+    return null
+  const status = selectedModel.value.status
+  if (status === 'running')
+    return { text: 'Running', color: 'success' }
+  if (status === 'pulling_model')
+    return { text: 'Pulling…', color: 'warning' }
+  if (status === 'exited')
+    return { text: 'Stopped', color: 'error' }
+
+  return { text: status, color: 'grey' }
+})
+
+const canSend = computed(() => !!selectedModel.value
+  && selectedModel.value.status === 'running'
+  && !!message.value.trim()
+  && !!selectedChatId.value
+  && !!websocket.value
+  && !waitingForResponse.value
+  && !isReconnecting.value,
+)
 
 onUnmounted(() => {
   if (websocket.value)
@@ -95,9 +126,17 @@ const userPulledModels = computed(() => {
 const canUseStructuredOutput = computed(() => (isFormValid.value && structuredOutputFormat.value.length > 0))
 
 watch(userPulledModels, (newValue) => {
-  if (newValue.length)
+  if (!newValue.length) {
+    selectedModel.value = null
+
+    return
+  }
+  const stillExists = selectedModel.value
+    && newValue.some(m => m.model === selectedModel.value!.model
+      && m.parameters === selectedModel.value!.parameters)
+  if (!stillExists)
     selectedModel.value = newValue[0]
-})
+}, { immediate: true })
 
 watch(selectedModel, (newModel, oldModel) => {
   if (!newModel
@@ -128,6 +167,8 @@ function scrollToBottom() {
   if (scrollToMe.value)
     scrollToMe.value.scrollIntoView({ behavior: 'smooth' })
 }
+
+const activeChatId = ref('')
 
 const websocketHandlers = {
   onConnect: () => {
@@ -171,13 +212,18 @@ const websocketHandlers = {
   },
 
   onReceiveMessage: (message: WebsocketResponse) => {
+    if (selectedChatId.value !== activeChatId.value)
+      return
+
     waitingForResponse.value = false
     if (message.done) {
-      chatHistoryPerModel.value[selectedModel.value!.model].push({
-        role: 'assistant',
-        content: message.message,
-        image: '',
-      })
+      if (selectedModel.value) {
+        chatHistoryPerModel.value[selectedModel.value.model].push({
+          role: 'assistant',
+          content: message.message,
+          image: '',
+        })
+      }
       botResponse.value = ''
     }
     else {
@@ -189,6 +235,8 @@ const websocketHandlers = {
 watch(selectedChatId, (newChatId) => {
   if (!newChatId)
     return
+
+  activeChatId.value = newChatId
 
   if (websocket.value)
     websocket.value.closeConnection()
@@ -204,8 +252,30 @@ function softReset() {
   emit('softReset')
 }
 
-function copyToClipboard(content: string) {
+function copyToClipboard(content: string, key?: string) {
   navigator.clipboard.writeText(content)
+  if (key !== undefined) {
+    copiedIndex.value = key
+    setTimeout(() => {
+      copiedIndex.value = null
+    }, 1500)
+  }
+}
+
+function useSuggestion(text: string) {
+  message.value = text
+  focusComposer()
+  nextTick(() => {
+    if (composerTextarea.value)
+      autoGrow(composerTextarea.value)
+  })
+}
+
+function onMessagesScroll() {
+  const el = messagesContainer.value
+  if (!el)
+    return
+  showScrollFab.value = el.scrollHeight - el.scrollTop - el.clientHeight > 120
 }
 
 function splitMessage(message: string) {
@@ -280,7 +350,6 @@ function splitMessageRaw(message: string) {
 }
 
 function cleanEmptyHtmlTags(text: string): string {
-  // Remove empty HTML tags
   const emptyTagRegex = /<([a-z0-9]+)(\s[^>]*)?>(\s*)<\/\1>/gi
 
   let previousText = ''
@@ -294,18 +363,45 @@ function cleanEmptyHtmlTags(text: string): string {
   return currentText
 }
 
+marked.use({ gfm: true, breaks: true })
+
+function renderMarkdown(text: string): string {
+  return marked.parse(text) as string
+}
+
+const composerTextarea = ref<HTMLTextAreaElement | null>(null)
+
+function autoGrow(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 128)}px`
+}
+
+function onTextareaInput(event: Event) {
+  autoGrow(event.target as HTMLTextAreaElement)
+}
+
+function focusComposer() {
+  composerTextarea.value?.focus()
+}
+
 function toggleThoughts(index: number) {
   expandedThoughts.value[index] = !expandedThoughts.value[index]
 }
 
 function sendQuestion() {
-  if (!selectedModel.value || !message.value || !selectedChatId.value || !websocket.value)
+  if (!canSend.value)
     return
+
+  if (!websocket.value || websocket.value.readyState !== WebSocket.OPEN) {
+    snackbarStore.showSnackbarError('Connection lost — please wait for reconnection or refresh the page.')
+
+    return
+  }
 
   waitingForResponse.value = true
 
-  const model = selectedModel.value.model
-  const modelParameters = selectedModel.value.parameters
+  const model = selectedModel.value!.model
+  const modelParameters = selectedModel.value!.parameters
 
   const websocketMessage: WebsocketMessage = {
     message: message.value,
@@ -360,45 +456,61 @@ watch(waitingForResponse, (newValue) => {
 </script>
 
 <template>
-  <v-card>
-    <v-card-text>
-      <v-row class="justify-space-between flex">
-        <v-col
-          cols="12"
-          sm="5"
-          md="4"
+  <div class="chat-card">
+    <!-- Controls: model select + structured output -->
+    <div class="chat-controls">
+      <div class="controls-row">
+        <v-select
+          v-model="selectedModel"
+          label="AI Model"
+          :items="userPulledModels"
+          :item-title="item => `${item.name} - ${item.parameters}`"
+          return-object
+          density="comfortable"
+          hide-details
+          class="model-select"
         >
-          <v-select
-            v-model="selectedModel"
-            label="AI Model"
-            :items="userPulledModels"
-            :item-title="item => `${item.name} - ${item.parameters}`"
-            return-object
+          <template #prepend-item>
+            <v-list-item to="/models">
+              Add more models
+              <v-icon
+                icon="mdi-arrow-right"
+                class="ml-2"
+              />
+            </v-list-item>
+
+            <v-divider class="my-2" />
+          </template>
+
+          <template #no-data />
+
+          <template
+            v-if="modelStatusLabel"
+            #append-inner
           >
-            <template #prepend-item>
-              <v-list-item to="/models">
-                Add more models
+            <v-chip
+              :color="modelStatusLabel.color"
+              size="x-small"
+              variant="tonal"
+              class="mr-1"
+            >
+              {{ modelStatusLabel.text }}
+            </v-chip>
+          </template>
+        </v-select>
 
-                <v-icon
-                  icon="mdi-arrow-right"
-                  class="ml-2"
-                />
-              </v-list-item>
-
-              <v-divider class="my-2" />
-            </template>
-
-            <template #no-data />
-          </v-select>
-        </v-col>
-
-        <v-col
-          cols="12"
-          sm="5"
-          md="4"
-          class="flex"
-        >
-          <v-text-field label="Structured output">
+        <div class="structured-output-control">
+          <v-btn
+            size="small"
+            :variant="useStructuredOutput && canUseStructuredOutput
+              ? 'tonal'
+              : 'outlined'"
+            :color="useStructuredOutput && canUseStructuredOutput
+              ? 'primary'
+              : undefined"
+            prepend-icon="mdi-code-json"
+          >
+            JSON format
             <StructuredOutputSelector
               v-model:format="structuredOutputFormat"
               v-model:is-form-valid="isFormValid"
@@ -408,316 +520,482 @@ watch(waitingForResponse, (newValue) => {
               activator="parent"
               location="top"
             >
-              When enabled, AI model will return the message in the given JSON format.
+              When enabled, AI model returns a response in the given JSON format.
             </v-tooltip>
-          </v-text-field>
+          </v-btn>
 
           <v-switch
             v-model="useStructuredOutput"
             :disabled="!canUseStructuredOutput"
-            class="ml-4"
-            color="primary"
-          />
-        </v-col>
-      </v-row>
-
-      <v-card
-        variant="outlined"
-        width="100%"
-        height="100%"
-      >
-        <v-card-text>
-          <v-alert
-            v-if="isReconnecting"
-            type="warning"
             density="compact"
-            class="mb-3"
-            variant="tonal"
+            color="primary"
+            hide-details
+            class="ml-4"
+          />
+        </div>
+      </div>
+
+      <v-alert
+        v-if="selectedModel && selectedModel.status !== 'running'"
+        type="warning"
+        density="compact"
+        variant="tonal"
+        class="text-body-2 mt-2"
+      >
+        <span v-if="selectedModel.status === 'pulling_model'">
+          Model is still being pulled — sending will be enabled once it's ready.
+        </span>
+
+        <span v-else>
+          Container is not running.
+          <v-btn
+            variant="text"
+            size="x-small"
+            class="px-1"
+            to="/models"
           >
-            Connection lost — reconnecting...
-          </v-alert>
+            Manage on Models page
+          </v-btn>
+        </span>
+      </v-alert>
 
-          <v-list
-            :max-height="mobile
-              ? `${height - 360}px`
-              : `${height - 450}px`"
-            class="overflow-y-auto"
+      <v-alert
+        v-if="isReconnecting"
+        type="warning"
+        density="compact"
+        variant="tonal"
+        class="mt-2"
+      >
+        Connection lost — reconnecting...
+      </v-alert>
+    </div>
+
+    <!-- Messages area wrapper -->
+    <div class="messages-area">
+      <div
+        ref="messagesContainer"
+        class="messages-container"
+        @scroll="onMessagesScroll"
+      >
+        <!-- Empty: no model -->
+        <div
+          v-if="!selectedModel"
+          class="empty-state"
+        >
+          <div class="empty-state-icon-wrap mb-5">
+            <v-icon
+              size="40"
+              icon="mdi-robot-outline"
+              color="white"
+            />
+          </div>
+
+          <div class="text-h6 font-weight-medium mb-2">
+            No model is running yet
+          </div>
+
+          <v-timeline
+            align="start"
+            density="compact"
+            class="text-left"
+            style="max-width: 380px"
           >
-            <div
-              v-for="(chatMessage, index) in chatHistory"
-              :key="index"
-              :style="chatMessage.role === 'user'
-                ? 'justify-content: flex-end'
-                : 'justify-content: flex-start'"
-              style="display: flex"
-              :class="index === 0
-                ? ''
-                : 'mt-4'"
+            <v-timeline-item
+              dot-color="primary"
+              size="x-small"
             >
-              <v-list-item
-                rounded="shaped"
-                :style="chatMessage.role === 'user'
-                  ? `background-color: ${userMessageColor}`
-                  : `background-color: ${botMessageColor}`"
-                :max-width="mobile
-                  ? '90%'
-                  : '70%'"
-                class="px-4 py-2 text-align-start"
-              >
-                <div v-if="chatMessage.role === 'assistant'">
-                  <v-btn
-                    v-if="splitMessage(chatMessage.content).thoughts"
-                    size="x-small"
-                    class="mb-2"
-                    @click="toggleThoughts(index)"
-                  >
-                    {{ expandedThoughts[index]
-                      ? 'Hide thoughts'
-                      : 'Show thoughts' }}
-                  </v-btn>
+              <div class="text-body-2">
+                Make sure <strong>Docker Desktop</strong> is running.
+              </div>
+            </v-timeline-item>
 
-                  <div
-                    v-if="splitMessage(chatMessage.content).thoughts && expandedThoughts[index]"
-                    class="mb-2 font-italic"
-                    style="white-space: pre-wrap"
-                  >
-                    {{ splitMessage(chatMessage.content).thoughts }}
-                  </div>
-
-                  <div
-                    v-for="(part, partIndex) in splitMessage(chatMessage.content).parts"
-                    :key="partIndex"
-                  >
-                    <div
-                      v-if="part.title === 'text'"
-                      v-sanitize-html="part.content"
-                      style="white-space: pre-wrap"
-                    />
-
-                    <div
-                      v-else-if="part.title === 'code'"
-                      class="my-4"
-                    >
-                      <v-card>
-                        <v-card-title
-                          class="text-subtitle-2"
-                          style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
-                        >
-                          <span>
-                            {{ part.language }}
-                          </span>
-
-                          <v-btn
-                            variant="text"
-                            size="x-small"
-                            icon="mdi-content-copy"
-                            @click="copyToClipboard(part.content)"
-                          />
-                        </v-card-title>
-
-                        <v-card-text
-                          style="white-space: pre-wrap"
-                          class="mt-3"
-                        >
-                          {{ part.content }}
-                        </v-card-text>
-                      </v-card>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-else>
-                  {{ chatMessage.content }}
-                </div>
-
-                <p
-                  v-if="chatMessage.image"
-                  align="end"
-                  class="mt-2"
-                >
-                  <img
-                    :src="chatMessage.image"
-                    alt="Uploaded image"
-                    style="max-width: 100%; max-height: 100px"
-                  >
-                </p>
-              </v-list-item>
-            </div>
-
-            <v-list-item
-              v-if="botResponse"
-              rounded="shaped"
-              :style="`display: flex; justify-content: flex-start; background-color: ${botMessageColor}`"
-              :max-width="mobile
-                ? '90%'
-                : '70%'"
-              class="mt-4 px-4 py-2 text-align-start"
+            <v-timeline-item
+              dot-color="primary"
+              size="x-small"
             >
-              <div>
+              <div class="text-body-2">
+                Go to the
                 <v-btn
-                  v-if="splitMessage(botResponse).thoughts"
+                  variant="text"
                   size="x-small"
-                  class="mb-2"
-                  @click="botThoughtsVisible = !botThoughtsVisible"
+                  class="px-1"
+                  to="/models"
                 >
-                  {{ botThoughtsVisible
+                  Models page
+                </v-btn>
+                ,
+                pick a model, select a version, and click <strong>Create container</strong>.
+              </div>
+            </v-timeline-item>
+
+            <v-timeline-item
+              dot-color="success"
+              size="x-small"
+            >
+              <div class="text-body-2">
+                Once the status shows <strong>Running</strong>, come back here and start chatting.
+              </div>
+            </v-timeline-item>
+          </v-timeline>
+        </div>
+
+        <!-- Empty: model ready but no messages -->
+        <div
+          v-if="!chatHistory.length && !botResponse && !waitingForResponse && selectedModel"
+          class="empty-state"
+        >
+          <div class="empty-state-icon-wrap mb-5">
+            <v-icon
+              size="40"
+              icon="mdi-chat-outline"
+              color="white"
+            />
+          </div>
+
+          <div class="text-h6 font-weight-medium mb-1">
+            Start the conversation
+          </div>
+
+          <div class="text-body-2 text-medium-emphasis mb-6">
+            Type a message below or try a suggestion
+          </div>
+
+          <div class="suggestions-row">
+            <v-chip
+              v-for="s in suggestions"
+              :key="s"
+              variant="tonal"
+              color="primary"
+              class="suggestion-chip"
+              @click="useSuggestion(s)"
+            >
+              {{ s }}
+            </v-chip>
+          </div>
+        </div>
+
+        <!-- Messages list with enter transitions -->
+        <TransitionGroup
+          name="msg"
+          tag="div"
+          class="messages-list"
+        >
+          <!-- Historical messages -->
+          <div
+            v-for="(chatMessage, index) in chatHistory"
+            :key="index"
+            class="message-row"
+            :class="chatMessage.role === 'user'
+              ? 'message-row--user'
+              : 'message-row--bot'"
+          >
+            <!-- Bot avatar -->
+            <v-avatar
+              v-if="chatMessage.role === 'assistant'"
+              size="28"
+              class="message-avatar"
+              style="background: linear-gradient(135deg, #6366F1, #818CF8); flex-shrink: 0"
+            >
+              <v-icon
+                size="16"
+                color="white"
+              >
+                mdi-robot
+              </v-icon>
+            </v-avatar>
+
+            <!-- Message bubble -->
+            <div
+              class="message-bubble"
+              :class="chatMessage.role === 'user'
+                ? 'message-bubble--user'
+                : 'message-bubble--bot'"
+              :style="chatMessage.role === 'user'
+                ? `background-color: ${userMessageColor}`
+                : `background-color: ${botMessageColor}`"
+            >
+              <!-- Bot content -->
+              <template v-if="chatMessage.role === 'assistant'">
+                <v-btn
+                  v-if="splitMessage(chatMessage.content).thoughts"
+                  size="x-small"
+                  variant="tonal"
+                  class="mb-2"
+                  @click="toggleThoughts(index)"
+                >
+                  {{ expandedThoughts[index]
                     ? 'Hide thoughts'
                     : 'Show thoughts' }}
                 </v-btn>
 
                 <div
-                  v-if="splitMessage(botResponse).thoughts && botThoughtsVisible"
-                  class="mb-2 font-italic"
-                  style="white-space: pre-wrap"
+                  v-if="splitMessage(chatMessage.content).thoughts && expandedThoughts[index]"
+                  class="text-body-2 mb-2 font-italic"
+                  style="white-space: pre-wrap; opacity: 0.8"
                 >
-                  {{ splitMessage(botResponse).thoughts }}
+                  {{ splitMessage(chatMessage.content).thoughts }}
                 </div>
 
                 <div
-                  v-for="(part, partIndex) in splitMessage(botResponse).parts"
+                  v-for="(part, partIndex) in splitMessage(chatMessage.content).parts"
                   :key="partIndex"
                 >
                   <div
                     v-if="part.title === 'text'"
-                    v-sanitize-html="part.content"
-                    style="white-space: pre-wrap"
+                    v-sanitize-html="renderMarkdown(part.content)"
+                    class="markdown-body"
                   />
 
                   <div
                     v-else-if="part.title === 'code'"
-                    class="my-4"
+                    class="my-3"
                   >
                     <v-card>
                       <v-card-title
                         class="text-subtitle-2"
-                        style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.4)"
+                        style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.15)"
                       >
-                        <span>
-                          {{ part.language }}
-                        </span>
+                        <span>{{ part.language || 'code' }}</span>
 
                         <v-btn
+                          variant="text"
                           size="x-small"
-                          icon="mdi-content-copy"
-                          @click="copyToClipboard(part.content)"
+                          :icon="copiedIndex === `code-${index}-${partIndex}`
+                            ? 'mdi-check'
+                            : 'mdi-content-copy'"
+                          @click="copyToClipboard(part.content, `code-${index}-${partIndex}`)"
                         />
                       </v-card-title>
 
-                      <v-card-text
-                        style="white-space: pre-wrap"
-                        class="mt-3"
-                      >
+                      <v-card-text class="code-text mt-2">
                         {{ part.content }}
                       </v-card-text>
                     </v-card>
                   </div>
                 </div>
-              </div>
-            </v-list-item>
+              </template>
 
-            <v-list-item
-              v-if="waitingForResponse"
-              rounded="shaped"
-              :style="`display: flex; justify-content: flex-start; background-color: ${botMessageColor}`"
-              max-width="15%"
-              class="d-flex mt-4 justify-center px-4 py-3"
+              <!-- User content -->
+              <template v-else>
+                {{ chatMessage.content }}
+              </template>
+
+              <!-- Attached image -->
+              <p
+                v-if="chatMessage.image"
+                align="end"
+                class="mb-0 mt-2"
+              >
+                <img
+                  :src="chatMessage.image"
+                  alt="Uploaded image"
+                  style="max-width: 100%; max-height: 120px; border-radius: 8px"
+                >
+              </p>
+            </div>
+
+            <!-- Hover-reveal copy action -->
+            <v-btn
+              class="message-action-btn"
+              icon
+              size="x-small"
+              variant="plain"
+              @click="copyToClipboard(chatMessage.content, `msg-${index}`)"
+            >
+              <v-icon size="14">
+                {{ copiedIndex === `msg-${index}`
+                  ? 'mdi-check'
+                  : 'mdi-content-copy' }}
+              </v-icon>
+            </v-btn>
+
+            <!-- User avatar -->
+            <v-avatar
+              v-if="chatMessage.role === 'user'"
+              size="28"
+              class="message-avatar"
+              style="background: linear-gradient(135deg, #4F46E5, #6366F1); flex-shrink: 0"
+            >
+              <v-icon
+                size="16"
+                color="white"
+              >
+                mdi-account
+              </v-icon>
+            </v-avatar>
+          </div>
+
+          <!-- Streaming bot response -->
+          <div
+            v-if="botResponse"
+            key="streaming"
+            class="message-row message-row--bot"
+          >
+            <v-avatar
+              size="28"
+              class="message-avatar"
+              style="background: linear-gradient(135deg, #6366F1, #818CF8); flex-shrink: 0"
+            >
+              <v-icon
+                size="16"
+                color="white"
+              >
+                mdi-robot
+              </v-icon>
+            </v-avatar>
+
+            <div
+              class="message-bubble message-bubble--bot"
+              :style="`background-color: ${botMessageColor}`"
+            >
+              <v-btn
+                v-if="splitMessage(botResponse).thoughts"
+                size="x-small"
+                variant="tonal"
+                class="mb-2"
+                @click="botThoughtsVisible = !botThoughtsVisible"
+              >
+                {{ botThoughtsVisible
+                  ? 'Hide thoughts'
+                  : 'Show thoughts' }}
+              </v-btn>
+
+              <div
+                v-if="splitMessage(botResponse).thoughts && botThoughtsVisible"
+                class="text-body-2 mb-2 font-italic"
+                style="white-space: pre-wrap; opacity: 0.8"
+              >
+                {{ splitMessage(botResponse).thoughts }}
+              </div>
+
+              <div
+                v-for="(part, partIndex) in splitMessage(botResponse).parts"
+                :key="partIndex"
+              >
+                <div
+                  v-if="part.title === 'text'"
+                  v-sanitize-html="part.content"
+                  style="white-space: pre-wrap"
+                />
+
+                <div
+                  v-else-if="part.title === 'code'"
+                  class="my-3"
+                >
+                  <v-card>
+                    <v-card-title
+                      class="text-subtitle-2"
+                      style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(127, 127, 127, 0.15)"
+                    >
+                      <span>{{ part.language }}</span>
+
+                      <v-btn
+                        size="x-small"
+                        icon="mdi-content-copy"
+                        @click="copyToClipboard(part.content)"
+                      />
+                    </v-card-title>
+
+                    <v-card-text class="code-text mt-2">
+                      {{ part.content }}
+                    </v-card-text>
+                  </v-card>
+                </div>
+              </div>
+
+              <!-- Blinking caret during streaming -->
+              <span class="stream-caret" />
+            </div>
+          </div>
+
+          <!-- Typing indicator -->
+          <div
+            v-if="waitingForResponse"
+            key="typing"
+            class="message-row message-row--bot"
+          >
+            <v-avatar
+              size="28"
+              class="message-avatar"
+              style="background: linear-gradient(135deg, #6366F1, #818CF8); flex-shrink: 0"
+            >
+              <v-icon
+                size="16"
+                color="white"
+              >
+                mdi-robot
+              </v-icon>
+            </v-avatar>
+
+            <div
+              class="message-bubble message-bubble--bot typing-bubble"
+              :style="`background-color: ${botMessageColor}`"
             >
               <div class="typing-indicator">
                 <span />
+
                 <span />
+
                 <span />
               </div>
-            </v-list-item>
+            </div>
+          </div>
+        </TransitionGroup>
 
-            <v-list-item
-              v-if="!chatHistory.length && !botResponse && !waitingForResponse && selectedModel"
-              class="d-flex justify-center mt-8"
-            >
-              <div class="text-center text-medium-emphasis">
-                <v-icon
-                  size="48"
-                  icon="mdi-chat-outline"
-                  class="mb-3 d-block"
-                />
-                <div class="text-body-1">
-                  Start the conversation!
-                </div>
-                <div class="text-body-2 mt-1">
-                  Type a message below and press Enter.
-                </div>
-              </div>
-            </v-list-item>
+        <div ref="scrollToMe" />
+      </div>
 
-            <v-list-item
-              v-if="!selectedModel"
-              class="d-flex justify-center mt-8"
-            >
-              <div class="text-center text-medium-emphasis">
-                <v-icon
-                  size="48"
-                  icon="mdi-robot-outline"
-                  class="mb-3 d-block"
-                />
-                <div class="text-body-1">
-                  No model selected
-                </div>
-                <div class="text-body-2 mt-1">
-                  Select a model above or
-                  <v-btn
-                    variant="text"
-                    size="small"
-                    class="px-1"
-                    to="/models"
-                  >
-                    add one on the Models page
-                  </v-btn>.
-                </div>
-              </div>
-            </v-list-item>
+      <!-- Scroll-to-bottom FAB -->
+      <Transition name="fade">
+        <v-btn
+          v-if="showScrollFab"
+          class="scroll-fab"
+          icon
+          size="small"
+          elevation="4"
+          style="background: linear-gradient(135deg, #6366F1, #818CF8)"
+          @click="scrollToBottom"
+        >
+          <v-icon color="white">
+            mdi-chevron-down
+          </v-icon>
+        </v-btn>
+      </Transition>
+    </div>
 
-            <div ref="scrollToMe" />
-          </v-list>
-
-          <v-spacer class="mt-4" />
-
-          <v-row
-            v-if="image"
-            justify="end"
-            class="ma-0"
+    <!-- Composer bar -->
+    <div
+      class="composer-bar"
+      :class="{'composer-disabled': !selectedModel || selectedModel.status !== 'running' || waitingForResponse}"
+    >
+      <div
+        v-if="image"
+        class="composer-image-preview"
+      >
+        <v-badge
+          icon="mdi-close"
+          color="error"
+          style="cursor: pointer"
+          @click="clearImage"
+        >
+          <img
+            :src="image"
+            alt="Uploaded image"
+            style="max-height: 80px; border-radius: 8px"
           >
-            <v-badge
-              icon="mdi-close"
-              color="error"
-              @click="clearImage"
-            >
-              <img
-                :src="image"
-                alt="Uploaded image"
-                style="max-width: 100%; max-height: 100px"
-              >
-            </v-badge>
-          </v-row>
-        </v-card-text>
-      </v-card>
+        </v-badge>
+      </div>
 
-      <v-row class="mx-2 mt-4">
-        <v-text-field
-          v-model="message"
-          label="Message"
-          @keydown.enter="sendQuestion"
-        />
-
+      <div class="composer-row">
         <v-btn
           v-if="selectedModel?.canProcessImages"
-          variant="flat"
-          class="ml-4 mt-1"
           icon
+          variant="text"
+          size="small"
+          :disabled="!selectedModel || selectedModel.status !== 'running' || waitingForResponse"
           @click="fileInput?.click()"
         >
-          <v-icon
-            size="x-large"
-            icon="mdi-file-upload-outline"
-          />
+          <v-icon>mdi-image-plus</v-icon>
 
           <input
             ref="fileInput"
@@ -728,28 +1006,210 @@ watch(waitingForResponse, (newValue) => {
           >
         </v-btn>
 
+        <div
+          class="composer-input-wrap"
+          @click="focusComposer"
+        >
+          <textarea
+            ref="composerTextarea"
+            v-model="message"
+            placeholder="Message…"
+            rows="1"
+            class="composer-native-textarea"
+            :disabled="!selectedModel || selectedModel.status !== 'running' || waitingForResponse"
+            @input="onTextareaInput"
+            @keydown.enter.exact.prevent="sendQuestion"
+            @keydown.shift.enter.exact.stop
+          />
+        </div>
+
         <v-btn
-          variant="flat"
-          class="ml-2 mt-1"
           icon
-          :disabled="waitingForResponse"
+          variant="text"
+          size="small"
+          :disabled="!canSend"
+          class="send-btn"
+          :class="{'send-btn--active': canSend}"
           @click="sendQuestion"
         >
-          <v-icon
-            size="x-large"
-            icon="mdi-send-circle-outline"
-          />
+          <v-icon>mdi-send</v-icon>
         </v-btn>
-      </v-row>
-    </v-card-text>
-  </v-card>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.typing-indicator {
+.chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.controls-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.model-select {
+  min-width: 180px;
+  flex: 1;
+  max-width: 340px;
+}
+
+.structured-output-control {
   display: flex;
   align-items: center;
-  gap: 4px;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Messages area ─────────────────────────────────────── */
+.messages-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.messages-container {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 127, 127, 0.25) transparent;
+}
+
+.messages-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.25);
+  border-radius: 2px;
+}
+
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Empty states ──────────────────────────────────────── */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.empty-state-icon-wrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366F1, #818CF8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+}
+
+.suggestions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 480px;
+}
+
+.suggestion-chip {
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.suggestion-chip:hover {
+  transform: translateY(-2px);
+}
+
+/* ── Message rows ──────────────────────────────────────── */
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.message-row--user {
+  justify-content: flex-end;
+}
+
+.message-row--bot {
+  justify-content: flex-start;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
+/* hover-reveal copy button */
+.message-action-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.message-row:hover .message-action-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Bubbles ───────────────────────────────────────────── */
+.message-bubble {
+  border-radius: 18px;
+  padding: 10px 16px;
+  font-size: 0.925rem;
+  line-height: 1.65;
+  word-break: break-word;
+  max-width: 72%;
+}
+
+.message-bubble--user {
+  border-bottom-right-radius: 4px;
+  color: #ffffff;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+}
+
+.message-bubble--bot {
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.typing-bubble {
+  padding: 14px 18px 10px;
+}
+
+/* ── Typing indicator ──────────────────────────────────── */
+.typing-indicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 22px;
 }
 
 .typing-indicator span {
@@ -757,8 +1217,9 @@ watch(waitingForResponse, (newValue) => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(var(--v-theme-on-surface), 0.5);
   animation: typing-bounce 1.2s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 .typing-indicator span:nth-child(1) { animation-delay: 0s; }
@@ -766,7 +1227,260 @@ watch(waitingForResponse, (newValue) => {
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
   30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Stream caret ──────────────────────────────────────── */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: currentColor;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── Scroll FAB ────────────────────────────────────────── */
+.scroll-fab {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 5;
+}
+
+/* ── TransitionGroup: message entrance ─────────────────── */
+.msg-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.msg-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.msg-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Fade (FAB show/hide) ──────────────────────────────── */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Reduced motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .msg-enter-active {
+    transition: opacity 0.15s ease;
+  }
+
+  .msg-enter-from {
+    transform: none;
+  }
+
+  .stream-caret {
+    animation: none;
+    opacity: 1;
+  }
+
+  .typing-indicator span {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .suggestion-chip:hover {
+    transform: none;
+  }
+}
+
+/* ── Code blocks ───────────────────────────────────────── */
+.code-text {
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 0.875rem;
+}
+
+/* ── Composer ──────────────────────────────────────────── */
+.composer-bar {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 16px;
+  padding: 6px 8px 6px 16px;
+  background: rgb(var(--v-theme-surface-2));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  flex-shrink: 0;
+}
+
+.composer-bar:focus-within {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.composer-disabled {
+  opacity: 0.65;
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.composer-input-wrap {
+  flex: 1;
+  min-width: 0;
+  cursor: text;
+}
+
+.composer-native-textarea {
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  padding: 8px 0;
+  color: inherit;
+  min-height: 40px;
+  max-height: 128px;
+  overflow-y: auto;
+  display: block;
+}
+
+.composer-native-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+.composer-native-textarea:disabled {
+  cursor: not-allowed;
+}
+
+.composer-image-preview {
+  padding: 8px 0 4px 4px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Send button */
+.send-btn {
+  transition: transform 0.15s ease;
+}
+
+.send-btn--active {
+  color: #6366F1 !important;
+}
+
+.send-btn--active:active {
+  transform: scale(0.88);
+}
+
+/* ── Markdown ──────────────────────────────────────────── */
+.markdown-body :deep(p) {
+  margin: 0.3em 0;
+}
+
+.markdown-body :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0.75em 0 0.3em;
+}
+
+.markdown-body :deep(h1:first-child),
+.markdown-body :deep(h2:first-child),
+.markdown-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.markdown-body :deep(h1) { font-size: 1.35em; }
+.markdown-body :deep(h2) { font-size: 1.2em; }
+.markdown-body :deep(h3) { font-size: 1.08em; }
+.markdown-body :deep(h4) { font-size: 1em; }
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.4em 0;
+}
+
+.markdown-body :deep(li) {
+  margin: 0.2em 0;
+}
+
+.markdown-body :deep(strong) {
+  font-weight: 600;
+}
+
+.markdown-body :deep(em) {
+  font-style: italic;
+}
+
+.markdown-body :deep(code) {
+  font-family: 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 0.85em;
+  background: rgba(127, 127, 127, 0.2);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.markdown-body :deep(blockquote) {
+  border-left: 3px solid rgba(127, 127, 127, 0.4);
+  padding-left: 12px;
+  margin: 0.5em 0;
+  opacity: 0.85;
+}
+
+.markdown-body :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(127, 127, 127, 0.3);
+  margin: 0.75em 0;
+}
+
+.markdown-body :deep(a) {
+  color: inherit;
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+/* ── Mobile ────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .message-bubble {
+    max-width: 85%;
+  }
+
+  .model-select {
+    max-width: 100%;
+    min-width: 0;
+    flex-basis: 100%;
+  }
+
+  .message-action-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 </style>
