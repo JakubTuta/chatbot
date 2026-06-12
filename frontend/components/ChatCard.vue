@@ -1165,6 +1165,10 @@ watch(waitingForResponse, (newValue) => {
 }
 
 /* hover-reveal copy button */
+.message-row--user .message-action-btn {
+  order: -1;
+}
+
 .message-action-btn {
   opacity: 0;
   pointer-events: none;
