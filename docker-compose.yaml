@@ -1,8 +1,13 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector's image, not plain postgres:16-alpine — same Postgres 16,
+    # but with the `vector` extension files present so migration 0010's
+    # VectorExtension() can actually CREATE EXTENSION vector.
+    image: pgvector/pgvector:pg16
     ports:
-      - 5432:5432
+      # Loopback-only — this was published on 0.0.0.0 with a hardcoded
+      # admin/password, reachable from anyone on the same network.
+      - 127.0.0.1:5432:5432
     networks:
       - default
     environment:
@@ -18,18 +23,36 @@ services:
       retries: 5
     pull_policy: always
 
+  redis:
+    image: redis:7-alpine
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    pull_policy: always
+
   server:
     build:
       context: django_server
       dockerfile: Dockerfile
     ports:
-      - 8000:8000
+      - 127.0.0.1:8000:8000
     networks:
       - default
+    env_file:
+      - django_server/.env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     pull_policy: build
 
@@ -38,7 +61,7 @@ services:
       context: frontend
       dockerfile: Dockerfile
     ports:
-      - 3000:3000
+      - 127.0.0.1:3000:3000
     networks:
       - default
     pull_policy: build

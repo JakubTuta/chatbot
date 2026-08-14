@@ -1,0 +1,46 @@
+name: Catalog drift check
+
+# ollama.com's markup is the only thing the catalog parser depends on, and
+# it has already changed once without warning (the bug this whole overhaul
+# started from: 231 models silently parsed down to 0, reported as success).
+# This runs the real parser against the live site on a schedule so the next
+# redesign is caught here, not by a user opening `/models` to an empty page.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install parser dependencies
+        run: pip install httpx beautifulsoup4
+
+      - name: Parse the live ollama.com library page
+        working-directory: django_server
+        run: python -m django_app.catalog.check_live
+
+      - name: Open an issue if parsing broke
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh issue list --repo "$GITHUB_REPOSITORY" --label catalog-drift --state open --json number --jq '.[0]' | grep -q .; then
+            echo "An open catalog-drift issue already exists — not filing a duplicate."
+            exit 0
+          fi
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Catalog parser broke against live ollama.com" \
+            --label catalog-drift \
+            --body "The scheduled catalog drift check failed: \`django_app/catalog/parser.py\` could not parse ollama.com's library page (or returned suspiciously few models). ollama.com's markup has likely changed again. See the failed run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

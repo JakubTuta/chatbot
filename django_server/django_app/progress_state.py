@@ -1,8 +1,11 @@
+import logging
 import threading
 import time
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
@@ -46,6 +49,18 @@ def set_scrape(**kwargs) -> None:
         scrape_state.update(kwargs)
 
 
+def try_start_scrape() -> bool:
+    """Atomically claim the scrape/refresh slot. Returns False if one is
+    already running, so a double-click or a second browser tab can't start
+    two concurrent catalog refreshes racing each other's writes.
+    """
+    with _lock:
+        if scrape_state.get("running"):
+            return False
+        scrape_state.update(running=True, total=None, completed=0, current=None, error=None)
+        return True
+
+
 def broadcast(event_type: str, payload: dict, key: str = "", force: bool = False) -> None:
     if not force:
         now = time.monotonic()
@@ -68,4 +83,4 @@ def broadcast(event_type: str, payload: dict, key: str = "", force: bool = False
             {"type": event_type.replace("-", "_"), "payload": payload},
         )
     except Exception:
-        pass
+        logger.warning("Failed to broadcast %s event", event_type, exc_info=True)

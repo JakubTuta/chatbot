@@ -1,26 +1,49 @@
 <script setup lang="ts">
 const containerStore = useContainerStore()
 
-const dockerStatus = ref<'checking' | 'ok' | 'error'>('checking')
+const status = ref<'checking' | 'ok' | 'docker_down' | 'backend_unreachable'>('checking')
 
-onMounted(async () => {
-  const ok = await containerStore.checkDockerConnection()
-  dockerStatus.value = ok
-    ? 'ok'
-    : 'error'
-})
+async function check() {
+  status.value = 'checking'
+  status.value = await containerStore.checkSystemStatus()
+}
+
+onMounted(check)
 </script>
 
 <template>
-  <v-alert
-    v-if="dockerStatus === 'error'"
-    type="error"
-    variant="tonal"
-    class="mb-4"
-    icon="mdi-docker"
-    prominent
+  <div
+    v-if="status === 'docker_down' || status === 'backend_unreachable'"
+    class="status-banner"
   >
-    <v-alert-title>Docker is not running</v-alert-title>
-    Start Docker Desktop, wait for it to initialise, then refresh this page. Docker is required to run AI model containers.
-  </v-alert>
+    <span class="status-banner-label">Docker</span>
+
+    <span class="status-banner-text">
+      <template v-if="status === 'docker_down'">
+        Docker isn't running. Start Docker Desktop, wait for it to initialise, then recheck — it's
+        required to run AI model containers.
+      </template>
+
+      <template v-else>
+        Can't reach the backend server. This is separate from Docker — check that the Django server
+        is running, then recheck.
+      </template>
+    </span>
+
+    <button
+      type="button"
+      class="status-banner-action"
+      @click="check"
+    >
+      Recheck
+    </button>
+  </div>
+
+  <div
+    v-else-if="status === 'checking'"
+    class="mono-kicker"
+    style="margin-bottom: 8px"
+  >
+    Checking system status…
+  </div>
 </template>

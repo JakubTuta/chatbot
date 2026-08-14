@@ -20,21 +20,7 @@ import dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def load_dotenv():
-    dotenv_path = path.join(BASE_DIR, ".env")
-    example_dotenv_path = path.join(BASE_DIR, ".env.example")
-
-    env_path = dotenv.find_dotenv(filename=dotenv_path)
-    if not env_path:
-        env_path = dotenv.find_dotenv(filename=example_dotenv_path)
-
-    if env_path:
-        dotenv.load_dotenv(env_path)
-
-    dotenv.load_dotenv(dotenv_path)
-
-
-load_dotenv()
+dotenv.load_dotenv(path.join(BASE_DIR, ".env"))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -52,15 +38,25 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+# Defaulting this to "*" would accept any Host header — and since asgi.py
+# wraps the WebSocket router in AllowedHostsOriginValidator, it would also
+# accept a WebSocket handshake with *any* Origin, meaning any web page the
+# user has open could drive their local chat sockets. Binding ports to
+# 127.0.0.1 (docker-compose.yaml) stops other machines on the network, but
+# it does nothing against a malicious page running in the user's own
+# browser, which can always reach localhost — this is the actual defense
+# for that case.
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
+]
 
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true"
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
     if origin.strip()
 ]
-CORS_ALLOWS_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
@@ -68,6 +64,12 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.AllowAny",
     ],
     "UNAUTHENTICATED_USER": None,
+    # Every request is anonymous (no auth exists), so this is the only
+    # throttle that applies — a floor against a malicious page firing
+    # blind requests (no CORS read access needed to send them) or a
+    # runaway client loop, not a real per-user rate limit.
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {"anon": "120/min"},
 }
 
 # Application definition
@@ -91,16 +93,22 @@ ASGI_APPLICATION = "django_server.asgi.application"
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", "6379")))],
+        },
     }
 }
 
 MIDDLEWARE = [
+    # Must precede CommonMiddleware (and anything else that can generate a
+    # response) or CORS headers silently don't get attached to those
+    # responses.
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
 ROOT_URLCONF = "django_server.urls"

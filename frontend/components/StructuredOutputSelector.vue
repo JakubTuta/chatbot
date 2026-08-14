@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const isOpen = defineModel<boolean>('isOpen', { default: false, required: true })
 const format = defineModel<{
   field: string
   type: string
@@ -6,6 +7,7 @@ const format = defineModel<{
   arrayType?: string
 }[]>('format', { default: () => [], required: true })
 const isFormValid = defineModel<boolean>('isFormValid', { default: () => false, required: true })
+const enforced = defineModel<boolean>('enforced', { default: () => false, required: true })
 
 const { form, isValid } = useForm()
 
@@ -19,8 +21,9 @@ const simpleTypes = [
 const possibleTypes = [
   ...simpleTypes,
   { value: 'array', title: 'Array' },
-  // { value: 'object', title: 'Object' },
 ]
+
+const canEnforce = computed(() => isFormValid.value && format.value.length > 0)
 
 function addNewType() {
   format.value.push({ field: '', type: '' })
@@ -32,7 +35,15 @@ function removeType(index: number) {
 
 async function validate() {
   isFormValid.value = await isValid()
+
+  if (!canEnforce.value)
+    enforced.value = false
 }
+
+watch(isOpen, (open) => {
+  if (!open)
+    validate()
+})
 
 function downloadJSON() {
   const filename = 'structured_output.json'
@@ -105,42 +116,47 @@ function importJSON() {
 </script>
 
 <template>
-  <v-menu
-    activator="parent"
-    :close-on-content-click="false"
-    @click:outside="validate()"
+  <v-dialog
+    v-model="isOpen"
+    max-width="540"
+    transition="dialog-rise-transition"
   >
-    <v-card
-      width="500px"
-    >
-      <v-card-text>
+    <v-card class="reichat-dialog">
+      <div class="reichat-dialog-header">
+        <span class="reichat-dialog-title">JSON output</span>
+
+        <button
+          type="button"
+          class="reichat-dialog-close"
+          title="Close"
+          aria-label="Close"
+          @click="isOpen = false"
+        >
+          <v-icon size="16">
+            mdi-close
+          </v-icon>
+        </button>
+      </div>
+
+      <v-card-text class="reichat-dialog-body">
         <v-form
           ref="form"
           validate-on="eager"
+          @update:model-value="validate"
         >
-          <v-row
+          <div
             v-for="(formatLine, index) in format"
             :key="index"
-            class="my-2"
-            dense
-            align-center
+            class="field-row"
           >
-            <v-col
-              cols="12"
-              sm="5"
-            >
+            <div class="field-row-inputs">
               <v-text-field
                 v-model="formatLine.field"
                 density="compact"
                 :rules="[requiredRule()]"
                 label="Field"
               />
-            </v-col>
 
-            <v-col
-              cols="12"
-              sm="5"
-            >
               <v-select
                 v-model="formatLine.type"
                 :items="possibleTypes"
@@ -148,84 +164,151 @@ function importJSON() {
                 :rules="[requiredRule()]"
                 label="Type"
               />
-            </v-col>
 
-            <v-col
-              cols="12"
-              sm="2"
-            >
-              <v-btn
-                icon="mdi-delete"
-                color="error"
-                variant="text"
-                size="small"
+              <button
+                type="button"
+                class="reichat-dialog-close field-row-remove"
+                title="Remove field"
+                aria-label="Remove field"
                 @click="removeType(index)"
-              />
-            </v-col>
+              >
+                <v-icon size="16">
+                  mdi-delete
+                </v-icon>
+              </button>
+            </div>
 
-            <v-col
+            <v-select
               v-if="formatLine.type === 'array'"
-              cols="12"
-            >
-              <v-select
-                v-model="formatLine.arrayType"
-                :items="simpleTypes"
-                density="compact"
-                label="Array Type"
-              />
-            </v-col>
-
-            <v-col cols="12">
-              <v-textarea
-                v-model="formatLine.description"
-                density="compact"
-                label="Description"
-                variant="outlined"
-                rows="1"
-                auto-grow
-                hint="(Optional) Any additional information about the field that may help the model to best understand it."
-              />
-            </v-col>
-
-            <v-divider
-              v-if="index < format.length - 1"
-              class="mb-4"
+              v-model="formatLine.arrayType"
+              :items="simpleTypes"
+              density="compact"
+              label="Array type"
+              class="mb-2"
             />
-          </v-row>
 
-          <div class="mt-4 flex justify-center">
-            <v-btn
-              append-icon="mdi-plus"
-              @click="addNewType"
-            >
-              Add
-            </v-btn>
+            <v-textarea
+              v-model="formatLine.description"
+              density="compact"
+              label="Description"
+              rows="1"
+              auto-grow
+              hint="(Optional) Anything that helps the model understand this field."
+            />
           </div>
+
+          <button
+            type="button"
+            class="dashed-add-row"
+            @click="addNewType"
+          >
+            + Add field
+          </button>
         </v-form>
+
+        <div class="enforce-row">
+          <div>
+            <span class="enforce-label">Enforce this schema</span>
+
+            <span
+              class="enforce-hint"
+              :class="{'enforce-hint--amber': !canEnforce}"
+            >
+              {{ canEnforce
+                ? 'Responses must match the fields above'
+                : 'Name at least one field to enable' }}
+            </span>
+          </div>
+
+          <v-switch
+            v-model="enforced"
+            :disabled="!canEnforce"
+            density="compact"
+            hide-details
+            color="mint-btn"
+          />
+        </div>
       </v-card-text>
 
-      <v-card-actions>
+      <v-card-actions class="reichat-dialog-actions">
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-upload"
+          @click="importJSON()"
+        >
+          Import
+        </v-btn>
+
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-download"
+          @click="downloadJSON()"
+        >
+          Export
+        </v-btn>
+
         <v-spacer />
 
         <v-btn
-          color="primary"
-          append-icon="mdi-download"
-          variant="text"
-          @click="downloadJSON()"
+          color="mint-btn"
+          variant="flat"
+          @click="isOpen = false"
         >
-          Export JSON
-        </v-btn>
-
-        <v-btn
-          class="ml-2"
-          append-icon="mdi-upload"
-          color="secondary"
-          variant="text"
-          @click="importJSON()"
-        >
-          Import JSON
+          Done
         </v-btn>
       </v-card-actions>
     </v-card>
-  </v-menu>
+  </v-dialog>
 </template>
+
+<style scoped>
+.field-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-line-2);
+  margin-bottom: 8px;
+}
+
+.field-row-inputs {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.field-row-inputs > :first-child,
+.field-row-inputs > :nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-row-remove {
+  margin-top: 6px;
+  color: var(--color-red);
+}
+
+.enforce-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line-2);
+}
+
+.enforce-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.enforce-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--color-ink-3);
+}
+
+.enforce-hint--amber {
+  color: var(--color-amber);
+}
+</style>

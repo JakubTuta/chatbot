@@ -1,0 +1,121 @@
+"""Hardware/DiskUsage views over a mocked ContainerManager — never a real
+Docker daemon, same style as test_container_manager.py.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from container.ContainerManager import ContainerManager
+from django_app import models
+
+pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def _reset_singleton():
+    ContainerManager._client = None
+    yield
+    ContainerManager._client = None
+
+
+@pytest.fixture
+def connected_docker():
+    fake_client = MagicMock()
+    fake_client.ping.return_value = True
+    ContainerManager._client = fake_client
+    return fake_client
+
+
+def test_get_hardware_returns_ram_and_vram(client, connected_docker, monkeypatch):
+    monkeypatch.setattr("container.views.hardware.get_host_ram_bytes", lambda cm: 16_000_000_000)
+    monkeypatch.setattr("container.views.hardware.get_gpu_vram_bytes", lambda: 8_000_000_000)
+
+    response = client.get("/docker/hardware/")
+
+    assert response.status_code == 200
+    assert response.json() == {"ram_bytes": 16_000_000_000, "vram_bytes": 8_000_000_000}
+
+
+def test_get_hardware_missing_vram_is_null(client, connected_docker, monkeypatch):
+    monkeypatch.setattr("container.views.hardware.get_host_ram_bytes", lambda cm: 16_000_000_000)
+    monkeypatch.setattr("container.views.hardware.get_gpu_vram_bytes", lambda: None)
+
+    response = client.get("/docker/hardware/")
+
+    assert response.status_code == 200
+    assert response.json()["vram_bytes"] is None
+
+
+def test_get_hardware_docker_not_connected_returns_500(client, monkeypatch):
+    monkeypatch.setattr(ContainerManager, "connect_to_docker", lambda self: False)
+
+    response = client.get("/docker/hardware/")
+
+    assert response.status_code == 500
+
+
+def test_get_disk_usage_matches_containers_to_catalog_sizes(client, connected_docker, monkeypatch):
+    ai_model = models.AIModel.objects.create(name="llama3.1", model="llama3.1-disk-test", index=1)
+    models.AIModelVersion.objects.create(
+        ai_model=ai_model, parameters="8b", size="4.6 GB", size_bytes=4_920_000_000
+    )
+
+    monkeypatch.setattr(
+        ContainerManager,
+        "get_available_containers",
+        lambda self: [
+            {
+                "name": "llama3.1-disk-test_8b", "status": "running", "port": "11434",
+                "environment": {"model": "llama3.1-disk-test", "parameters": "8b"},
+            },
+        ],
+    )
+
+    response = client.get("/docker/disk-usage/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_bytes"] == 4_920_000_000
+    assert body["models"] == [
+        {"model": "llama3.1-disk-test", "parameters": "8b", "status": "running", "size_bytes": 4_920_000_000},
+    ]
+
+
+def test_get_disk_usage_unknown_model_has_null_size_and_excluded_from_total(client, connected_docker, monkeypatch):
+    monkeypatch.setattr(
+        ContainerManager,
+        "get_available_containers",
+        lambda self: [
+            {
+                "name": "ghost_1b", "status": "running", "port": "11434",
+                "environment": {"model": "ghost-disk-test", "parameters": "1b"},
+            },
+        ],
+    )
+
+    response = client.get("/docker/disk-usage/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_bytes"] == 0
+    assert body["models"][0]["size_bytes"] is None
+
+
+def test_get_disk_usage_no_containers_returns_empty(client, connected_docker, monkeypatch):
+    monkeypatch.setattr(ContainerManager, "get_available_containers", lambda self: [])
+
+    response = client.get("/docker/disk-usage/")
+
+    assert response.status_code == 200
+    assert response.json() == {"total_bytes": 0, "models": []}
+
+
+def test_get_disk_usage_docker_not_connected_returns_500(client, monkeypatch):
+    monkeypatch.setattr(ContainerManager, "connect_to_docker", lambda self: False)
+
+    response = client.get("/docker/disk-usage/")
+
+    assert response.status_code == 500

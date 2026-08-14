@@ -11,5 +11,10 @@ urlpatterns: list[URLPattern] = [
     ),
     path("all-chats/<str:model>", views.AllChats.as_view(), name="all_chats"),
     path("ai-models/", views.AIModels.as_view(), name="ai_models"),
-    path("ask-bot/<str:model>/<str:chat_id>", views.AskBot.as_view(), name="ask_bot"),
+    path("personas/", views.Personas.as_view(), name="personas"),
+    path("prompt-templates/", views.PromptTemplates.as_view(), name="prompt_templates"),
+    path("search/<str:model>", views.Search.as_view(), name="search"),
+    path("collections/", views.Collections.as_view(), name="collections"),
+    path("documents/", views.Documents.as_view(), name="documents"),
+    path("mcp-servers/", views.MCPServers.as_view(), name="mcp_servers"),
 ]

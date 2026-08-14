@@ -1,19 +1,112 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+/* ── Design tokens (redesign/README.md) ─────────────────── */
+:root {
+  --color-paper: oklch(0.963 0.013 168);
+  --color-card: oklch(0.995 0.004 168);
+  --color-soft: oklch(0.985 0.007 168);
+  --color-soft-2: oklch(0.975 0.009 168);
+  --color-line: oklch(0.9 0.012 168);
+  --color-line-2: oklch(0.93 0.012 168);
+  --color-line-dash: oklch(0.86 0.014 168);
+  --color-ink: oklch(0.27 0.018 168);
+  --color-ink-2: oklch(0.5 0.016 168);
+  --color-ink-3: oklch(0.62 0.014 168);
+  --color-mint: oklch(0.75 0.14 168);
+  --color-mint-btn: oklch(0.8 0.12 168);
+  --color-mint-btn-hover: oklch(0.76 0.13 168);
+  --color-mint-tint: oklch(0.93 0.035 168);
+  --color-mint-deep: oklch(0.5 0.09 168);
+  --color-mint-ink: oklch(0.3 0.06 168);
+  --color-mint-border: oklch(0.78 0.07 168);
+  --color-grey-dot: oklch(0.78 0.014 168);
+  --color-amber: oklch(0.78 0.13 65);
+  --color-red: oklch(0.62 0.16 25);
+  --color-overlay: oklch(0.3 0.02 168 / .14);
+
+  --color-banner-bg: oklch(0.95 0.05 60);
+  --color-banner-border: oklch(0.87 0.07 60);
+  --color-banner-text: oklch(0.38 0.06 60);
+  --color-banner-label: oklch(0.52 0.12 60);
+
+  --shadow-composer: 0 5px 20px oklch(0.5 0.03 168 / .08);
+  --shadow-popover: 0 10px 30px oklch(0.45 0.03 168 / .15);
+  --shadow-toast: 0 8px 26px oklch(0.4 0.03 168 / .14);
+  --shadow-dialog: 0 22px 60px oklch(0.4 0.03 168 / .2);
+
+  --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Consolas', 'Menlo', monospace;
+}
 
 body,
 .v-application {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
+  text-wrap: pretty;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Mono, uppercase, tracked-out section/status label */
+.mono-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+/* ── Motion ───────────────────────────────────────────────
+   Small and mechanical — motion reports machine state, nothing
+   here is decorative. */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+@keyframes dots {
+  0%, 100% { opacity: 0.22; }
+  50% { opacity: 1; }
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slidein {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Global thin scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(127, 127, 127, 0.2) transparent;
+  scrollbar-color: oklch(0.88 0.014 168) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 9px;
+  height: 9px;
 }
 
 *::-webkit-scrollbar-track {
@@ -21,11 +114,167 @@ body,
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(127, 127, 127, 0.2);
-  border-radius: 2px;
+  background-color: oklch(0.88 0.014 168);
+  border-radius: 6px;
+  border: 2px solid var(--color-paper);
+  background-clip: padding-box;
 }
 
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
+}
+
+/* ── Shared dialog shell (redesign/README.md "Dialogs") ─────
+   Reused by ConfirmDialog and every v-dialog-based dialog
+   component — a v-card gets `class="reichat-dialog"`, with a
+   sticky `.reichat-dialog-header` / scrolling body /
+   `.reichat-dialog-actions` footer inside it. */
+.reichat-dialog {
+  border-radius: 18px !important;
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-dialog);
+  background: var(--color-card) !important;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.reichat-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-line-2);
+  background: var(--color-card);
+  flex-shrink: 0;
+}
+
+.reichat-dialog-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.reichat-dialog-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--color-ink-3);
+  cursor: pointer;
+}
+
+.reichat-dialog-close:hover {
+  background: var(--color-soft);
+  color: var(--color-ink);
+}
+
+.reichat-dialog-body {
+  overflow-y: auto;
+}
+
+.reichat-dialog-actions {
+  border-top: 1px solid var(--color-line-2);
+  padding: 12px 18px;
+  flex-shrink: 0;
+}
+
+.v-overlay__scrim {
+  background: var(--color-overlay) !important;
+  opacity: 1 !important;
+}
+
+.dialog-rise-transition-enter-active {
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out;
+}
+
+.dialog-rise-transition-leave-active {
+  transition: opacity 0.12s ease-in;
+}
+
+.dialog-rise-transition-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.dialog-rise-transition-leave-to {
+  opacity: 0;
+}
+
+/* ── Amber banner (Docker/backend status, chat contextual alerts) ── */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  background: var(--color-banner-bg);
+  border: 1px solid var(--color-banner-border);
+  flex-wrap: wrap;
+}
+
+.status-banner-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--color-banner-label);
+  flex-shrink: 0;
+}
+
+.status-banner-text {
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+  color: var(--color-banner-text);
+}
+
+.status-banner-action {
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-banner-label);
+  background: transparent;
+  border: 1px solid var(--color-banner-border);
+  border-radius: 8px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.status-banner-action:hover {
+  background: oklch(0.92 0.06 60);
+}
+
+/* Dashed "add new" affordance — personas, templates, file sets, MCP servers */
+.dashed-add-row {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px dashed var(--color-line-dash);
+  background: transparent;
+  color: var(--color-mint-deep);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.dashed-add-row:hover {
+  border-color: var(--color-mint-border);
 }

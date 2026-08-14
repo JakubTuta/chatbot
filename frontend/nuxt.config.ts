@@ -4,19 +4,18 @@ import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
 export default defineNuxtConfig({
   app: {
     head: {
-      title: 'Chatbot',
-      link: [
-        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-        {
-          rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap',
-        },
-      ],
+      title: 'ReiChat',
     },
   },
 
-  css: ['~/assets/css/main.css'],
+  css: [
+    '@fontsource/instrument-sans/400.css',
+    '@fontsource/instrument-sans/500.css',
+    '@fontsource/instrument-sans/600.css',
+    '@fontsource/ibm-plex-mono/400.css',
+    '@fontsource/ibm-plex-mono/500.css',
+    '~/assets/css/main.css',
+  ],
 
   build: {
     transpile: ['vuetify'],
@@ -57,9 +56,15 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      serverUrl: process.env.SERVER_URL || process.env.DOCKER === 'true'
-        ? 'http://host.docker.internal:8000/'
-        : 'http://localhost:8000/',
+      // This runs in the browser, not in a container, so it always reaches
+      // the backend over the host's network — docker-compose publishes the
+      // server's port to the host regardless of how it's deployed.
+      // `host.docker.internal` is only resolvable *inside* a container, so
+      // it was never reachable from here; combined with an operator-
+      // precedence bug below (`||` binds tighter than `? :`), any truthy
+      // SERVER_URL picked that unreachable branch instead of its own value
+      // — the setting was silently ignored no matter what it was set to.
+      serverUrl: process.env.SERVER_URL || 'http://localhost:8000/',
     },
   },
 
@@ -68,20 +73,6 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'node-server',
   },
-
-  // nitro: {
-  //   static: true,
-  //   esbuild: {
-  //     options: {
-  //       target: 'esnext',
-  //     },
-  //   },
-  //   prerender: {
-  //     crawlLinks: true,
-  //     routes: ['/'],
-  //     failOnError: false,
-  //   },
-  // },
 
   typescript: {
     strict: true,

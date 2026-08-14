@@ -1,41 +1,23 @@
-import type { AxiosResponse } from 'axios'
 import axios from 'axios'
 
 export const useApiStore = defineStore('api', () => {
   const runtimeConfig = useRuntimeConfig()
   const baseURL = runtimeConfig.public.serverUrl
 
+  // 30s: several Docker endpoints (checking a cold daemon, starting a
+  // container) routinely take longer than a typical API timeout.
+  //
+  // No response interceptor here on purpose — every call site already
+  // shows its own contextual error snackbar
+  // (`error.response?.data?.error || 'Failed to X.'`). A generic one here
+  // used to fire alongside it on every failure, burning 2 of the 3 queue
+  // slots on one error.
   const api = ref(axios.create({
     baseURL,
-    timeout: 15000,
+    timeout: 30000,
   }))
-
-  api.value.interceptors.response.use(
-    response => response,
-    (error) => {
-      if (error.response?.status >= 500) {
-        const snackbarStore = useSnackbarStore()
-        snackbarStore.showSnackbarError('Server error — please try again later.')
-      }
-      else if (error.code === 'ECONNABORTED') {
-        const snackbarStore = useSnackbarStore()
-        snackbarStore.showSnackbarError('Request timed out — check your connection.')
-      }
-      else if (!error.response && error.code === 'ERR_NETWORK') {
-        const snackbarStore = useSnackbarStore()
-        snackbarStore.showSnackbarError('Network error — server may be down.')
-      }
-
-      return Promise.reject(error)
-    },
-  )
-
-  const isResponseOk = (response: AxiosResponse | null) => {
-    return response !== null && response.status >= 200 && response.status < 300
-  }
 
   return {
     api,
-    isResponseOk,
   }
 })

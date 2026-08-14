@@ -1,11 +1,13 @@
 import logging
 import threading
 
-from django_app.models import AIModel
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django_app.models import AIModel, AIModelVersion
+
+from . import hardware
 from .ContainerManager import ContainerManager
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,68 @@ class Containers(APIView):
         containers = docker_client.get_available_containers()
 
         return Response(containers, status=status.HTTP_200_OK)
+
+
+class Hardware(APIView):
+    def get(self, request) -> Response:
+        # url: /docker/hardware/
+
+        docker_client = ContainerManager()
+
+        if not docker_client.is_connected() and not docker_client.connect_to_docker():
+            return Response(
+                {"error": "Error connecting to Docker"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "ram_bytes": hardware.get_host_ram_bytes(docker_client),
+                "vram_bytes": hardware.get_gpu_vram_bytes(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class DiskUsage(APIView):
+    def get(self, request) -> Response:
+        # url: /docker/disk-usage/
+        # Real installed-model disk usage, not the registry's advertised
+        # size — matched against the catalog by (model, parameters) since
+        # Docker itself doesn't know which Ollama model a container holds.
+
+        docker_client = ContainerManager()
+
+        if not docker_client.is_connected() and not docker_client.connect_to_docker():
+            return Response(
+                {"error": "Error connecting to Docker"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        containers = docker_client.get_available_containers()
+
+        versions_by_key = {
+            (v.ai_model.model, v.parameters): v.size_bytes
+            for v in AIModelVersion.objects.select_related("ai_model").all()
+        }
+
+        entries = []
+        total_bytes = 0
+        for container in containers:
+            model = container["environment"].get("model")
+            parameters = container["environment"].get("parameters")
+            size_bytes = versions_by_key.get((model, parameters))
+            if size_bytes:
+                total_bytes += size_bytes
+
+            entries.append({
+                "model": model,
+                "parameters": parameters,
+                "status": container["status"],
+                "size_bytes": size_bytes,
+            })
+
+        return Response({"total_bytes": total_bytes, "models": entries}, status=status.HTTP_200_OK)
 
 
 class OllamaImage(APIView):
@@ -152,6 +216,7 @@ class Container(APIView):
         if existing is not None:
             if existing.status != "running":
                 existing.start()
+                existing.reload()
             return Response(
                 {
                     "status": "Container is running",
@@ -162,11 +227,11 @@ class Container(APIView):
 
         # New container: kick off async worker, return 202 immediately.
         model_name = ai_model.model
-        model_index = ai_model.index
         parameters = ai_model_version.parameters
 
         def _run_worker() -> None:
             from django.db import close_old_connections
+
             from django_app import progress_state
 
             close_old_connections()
@@ -223,8 +288,8 @@ class Container(APIView):
 
                 # Step 2: create + start container
                 _broadcast_progress("image_pull_progress", 100, "Starting container…")
-                container, host_port = dc.create_and_start_container(model_name, parameters, model_index)
-                if container is None or host_port is None:
+                container, _host_port = dc.create_and_start_container(model_name, parameters)
+                if container is None:
                     progress_state.clear_progress(container_name)
                     progress_state.broadcast(
                         "container_update",
@@ -235,16 +300,35 @@ class Container(APIView):
                     _broadcast_final()
                     return
 
+                base_url = dc.get_ollama_base_url(model_name, parameters)
+                if base_url is None:
+                    progress_state.clear_progress(container_name)
+                    progress_state.broadcast(
+                        "container_update",
+                        {"type": "container_update", "container": container_name, "error": "Container started but could not be reached"},
+                        key=container_name,
+                        force=True,
+                    )
+                    _broadcast_final()
+                    return
+
                 # Step 3: wait for Ollama to be ready
                 _broadcast_progress("model_pull_progress", 0, "Waiting for Ollama to start…")
-                if not dc.wait_for_ollama_ready(host_port):
-                    logger.warning("Ollama did not become ready on port %s", host_port)
+                if not dc.wait_for_ollama_ready(base_url):
+                    logger.warning("Ollama did not become ready at %s", base_url)
 
                 # Step 4: pull model with progress
                 def model_cb(percent: int, detail: str) -> None:
                     _broadcast_progress("model_pull_progress", percent, detail)
 
-                dc.pull_model_with_progress(model_name, parameters, host_port, progress_cb=model_cb)
+                pulled, pull_error = dc.pull_model_with_progress(model_name, parameters, base_url, progress_cb=model_cb)
+                if not pulled:
+                    progress_state.broadcast(
+                        "container_update",
+                        {"type": "container_update", "container": container_name, "error": pull_error or "Model pull failed"},
+                        key=container_name,
+                        force=True,
+                    )
 
             except Exception as e:
                 logger.error("Container run worker error for %s: %s", container_name, e)

@@ -9,10 +9,46 @@ export interface WebsocketMessage {
   }[]
 }
 
+export interface GenerationStats {
+  prompt_tokens?: number
+  completion_tokens?: number
+  tokens_per_second?: number
+  // Only present when the chat has an explicit num_ctx override set.
+  context_used?: number
+  context_limit?: number
+}
+
+export interface Citation {
+  document_id: number
+  filename: string
+  chunk_index: number
+}
+
+export interface ToolCall {
+  name: string
+  args: Record<string, unknown>
+  result: string
+}
+
 export interface WebsocketResponse {
   message: string
   done: boolean
   error?: string
+  // Set on the final message of a generation the user cancelled — `message`
+  // is empty in that case (the partial text was already sent as earlier
+  // `done: false` chunks), rather than a fresh full response.
+  stopped?: boolean
+  // Only present on the final `done: true` frame, and only when Ollama
+  // actually reported it (never on partial/cancelled generations).
+  stats?: GenerationStats
+  // Only present when the chat has active document collections and at
+  // least one chunk was relevant enough to include — see rag/retrieval.py.
+  citations?: Citation[]
+  // A standalone `done: false` frame — one per tool call the model made
+  // before its final answer. Never combined with `message` in the same
+  // frame (see CompareConsumer/ChatConsumer — tool_call frames carry no
+  // text of their own).
+  tool_call?: ToolCall
 }
 
 export interface WebsocketHandlers {
@@ -22,10 +58,34 @@ export interface WebsocketHandlers {
   onReceiveMessage: (data: WebsocketResponse) => void
   onError?: (message: string) => void
   onReconnecting?: (attempt: number) => void
+  onMaxReconnectFailed?: () => void
 }
 
-export interface WebSocketWrapper extends WebSocket {
+export interface RegeneratePayload {
+  ai_model: string
+  ai_model_parameters: string
+  structured_output?: WebsocketMessage['structured_output']
+}
+
+export interface EditResendPayload {
+  index: number
+  message: string
+  ai_model: string
+  ai_model_parameters: string
+  image?: string
+  structured_output?: WebsocketMessage['structured_output']
+}
+
+export interface WebSocketWrapper {
+  readonly readyState: number
   sendMessage: (message: WebsocketMessage) => void
+  stopGeneration: () => void
+  // Re-runs the last assistant reply in place — no new user message. The
+  // consumer replaces the existing assistant row rather than appending one.
+  regenerate: (payload: RegeneratePayload) => void
+  // Edits the user message at `index` and discards everything from that
+  // point on, replacing it with a freshly generated exchange.
+  editResend: (payload: EditResendPayload) => void
   closeConnection: () => void
 }
 
@@ -33,19 +93,21 @@ const RECONNECT_BASE_DELAY_MS = 1000
 const RECONNECT_MAX_DELAY_MS = 30_000
 const RECONNECT_MAX_ATTEMPTS = 8
 
-export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSocketWrapper {
-  const runtimeConfig = useRuntimeConfig()
-  const baseURL = runtimeConfig.public.serverUrl
-
+export function getWebsocket(handlers: WebsocketHandlers, roomId: string, baseURL: string): WebSocketWrapper {
   const url = new URL(baseURL)
   const socketHost = url.host
+  const scheme = url.protocol === 'https:'
+    ? 'wss'
+    : 'ws'
 
   let reconnectAttempts = 0
   let intentionallyClosed = false
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let currentSocket: WebSocket
 
   function buildSocket(): WebSocket {
-    const ws = new WebSocket(`ws://${socketHost}/ws/chat/${roomId}/`)
+    const ws = new WebSocket(`${scheme}://${socketHost}/ws/chat/${roomId}/`)
+    currentSocket = ws
 
     ws.addEventListener('open', () => {
       reconnectAttempts = 0
@@ -68,25 +130,11 @@ export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSo
         handlers.onReconnecting?.(reconnectAttempts)
 
         reconnectTimer = setTimeout(() => {
-          const newSocket = buildSocket()
-          Object.assign(extendedSocket, newSocket)
-          extendedSocket.sendMessage = (message: WebsocketMessage) => {
-            if (newSocket.readyState === WebSocket.OPEN) {
-              newSocket.send(JSON.stringify(message))
-              handlers.onSendMessage(message)
-            }
-            else {
-              console.warn('WebSocket is not open. Message not sent:', message)
-            }
-          }
-          extendedSocket.closeConnection = () => {
-            intentionallyClosed = true
-            if (reconnectTimer)
-              clearTimeout(reconnectTimer)
-            if (newSocket.readyState !== WebSocket.CLOSED)
-              newSocket.close()
-          }
+          buildSocket()
         }, delay)
+      }
+      else {
+        handlers.onMaxReconnectFailed?.()
       }
     })
 
@@ -110,26 +158,57 @@ export function getWebsocket(handlers: WebsocketHandlers, roomId: string): WebSo
     return ws
   }
 
-  const socket = buildSocket()
-  const extendedSocket = socket as WebSocketWrapper
+  currentSocket = buildSocket()
 
-  extendedSocket.sendMessage = (message: WebsocketMessage) => {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message))
-      handlers.onSendMessage(message)
-    }
-    else {
-      console.warn('WebSocket is not open. Message not sent:', message)
-    }
+  return {
+    // A getter delegating to whichever socket is currently live — reconnects
+    // used to replace the underlying WebSocket but callers kept reading
+    // `readyState` off the very first (now-dead) instance via `Object.assign`,
+    // which only copies own enumerable properties and misses prototype
+    // accessors like `readyState`. Every send after any reconnect silently
+    // failed as a result.
+    get readyState() {
+      return currentSocket.readyState
+    },
+    sendMessage: (message: WebsocketMessage) => {
+      if (currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ type: 'prompt', ...message }))
+        handlers.onSendMessage(message)
+      }
+      else {
+        console.warn('WebSocket is not open. Message not sent:', message)
+      }
+    },
+    stopGeneration: () => {
+      if (currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ type: 'stop' }))
+      }
+      else {
+        console.warn('WebSocket is not open. Stop not sent.')
+      }
+    },
+    regenerate: (payload: RegeneratePayload) => {
+      if (currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ type: 'regenerate', ...payload }))
+      }
+      else {
+        console.warn('WebSocket is not open. Regenerate not sent.')
+      }
+    },
+    editResend: (payload: EditResendPayload) => {
+      if (currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ type: 'edit_resend', ...payload }))
+      }
+      else {
+        console.warn('WebSocket is not open. Edit not sent.')
+      }
+    },
+    closeConnection: () => {
+      intentionallyClosed = true
+      if (reconnectTimer)
+        clearTimeout(reconnectTimer)
+      if (currentSocket.readyState !== WebSocket.CLOSED)
+        currentSocket.close()
+    },
   }
-
-  extendedSocket.closeConnection = () => {
-    intentionallyClosed = true
-    if (reconnectTimer)
-      clearTimeout(reconnectTimer)
-    if (socket.readyState !== WebSocket.CLOSED)
-      socket.close()
-  }
-
-  return extendedSocket
 }

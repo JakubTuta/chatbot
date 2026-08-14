@@ -1,3 +1,10 @@
+export interface IAIModelVersion {
+  parameters: string
+  size: string
+  size_bytes: number | null
+  verified_at: string | null
+}
+
 export interface IAIModel {
   id: string
   name: string
@@ -5,7 +12,9 @@ export interface IAIModel {
   description: string
   popularity: number
   can_process_image: boolean
-  versions: { parameters: string, size: string }[]
+  is_embedding: boolean
+  can_use_tools: boolean
+  versions: IAIModelVersion[]
   index: number
 }
 
@@ -17,6 +26,8 @@ export function mapAIModel(data: Partial<IAIModel>): IAIModel {
     description: data.description || '',
     popularity: data.popularity || 0,
     can_process_image: data.can_process_image || false,
+    is_embedding: data.is_embedding || false,
+    can_use_tools: data.can_use_tools || false,
     versions: data.versions || [],
     index: data.index || 0,
   }

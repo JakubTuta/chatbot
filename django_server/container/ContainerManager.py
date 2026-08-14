@@ -1,18 +1,24 @@
 import json
 import logging
 import os
+import threading
 import time
 import typing
 
 import docker
 import docker.errors
 import requests
+from django.db import transaction
 from docker.models.containers import Container
 from docker.models.images import Image
 from docker.models.networks import Network
 from docker.types.containers import DeviceRequest
 
+from .models import ContainerPort
+
 logger = logging.getLogger(__name__)
+
+PORT_RANGE_START = 11434
 
 
 class ContainerManager:
@@ -24,44 +30,68 @@ class ContainerManager:
         "PULLING_MODEL": "pulling_model",
     }
 
-    __client: docker.DockerClient | None = None
+    # A module-level singleton, not a per-instance client — ContainerManager()
+    # is constructed on every chat message, every 2s snapshot tick, and every
+    # view, and nothing ever closed the client, leaking a connection each time.
+    _client: docker.DockerClient | None = None
+    _client_lock = threading.Lock()
 
     def __init__(self) -> None:
-        self.connect_to_docker()
+        if ContainerManager._client is None:
+            self.connect_to_docker()
+
+    @property
+    def client(self) -> docker.DockerClient | None:
+        return ContainerManager._client
 
     def is_connected(self) -> bool:
-        return self.__client is not None
+        if ContainerManager._client is None:
+            return False
+
+        try:
+            return bool(ContainerManager._client.ping())
+        except Exception as e:
+            # The client object existing doesn't mean the daemon behind it is
+            # still alive — a stale client used to report connected forever
+            # after Docker Desktop was quit.
+            logger.warning("Docker client failed a health check, dropping it: %s", e)
+            ContainerManager._client = None
+            return False
 
     def connect_to_docker(self) -> bool:
-        try:
-            self.__client = docker.DockerClient()
+        with ContainerManager._client_lock:
+            if ContainerManager._client is not None:
+                return True
 
-            return True
+            try:
+                ContainerManager._client = docker.DockerClient()
 
-        except Exception as e:
-            logger.warning("Failed to connect to Docker: %s", e)
-            return False
+                return True
+
+            except Exception as e:
+                logger.warning("Failed to connect to Docker: %s", e)
+                return False
 
     def is_ollama_image_pulled(self) -> bool:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return False
 
         try:
-            self.__client.images.get("ollama/ollama")
+            self.client.images.get("ollama/ollama")
 
             return True
 
-        except:
+        except docker.errors.DockerException:
             return False
 
     def pull_ollama_image(self) -> Image | None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return None
 
-        return self.__client.images.pull("ollama/ollama", "latest")
+        return self.client.images.pull("ollama/ollama", "latest")
 
     def ensure_ollama_image(self, progress_cb: typing.Callable | None = None) -> bool:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return False
 
         if self.is_ollama_image_pulled():
@@ -74,7 +104,7 @@ class ContainerManager:
             layer_currents: dict[str, int] = {}
             current_layer_id: str = ""
 
-            for event in self.__client.api.pull(
+            for event in self.client.api.pull(
                 "ollama/ollama", tag="latest", stream=True, decode=True
             ):
                 layer_id = event.get("id", "")
@@ -111,10 +141,10 @@ class ContainerManager:
             return False
 
     def get_available_containers(self) -> list[dict[str, str]]:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return []
 
-        all_containers: list[Container] = self.__client.containers.list(
+        all_containers: list[Container] = self.client.containers.list(
             all=True, filters={"ancestor": "ollama/ollama:latest"}
         )
 
@@ -134,11 +164,11 @@ class ContainerManager:
         return mapped_containers
 
     def get_container(self, container_name: str) -> Container | None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return None
 
         try:
-            return self.__client.containers.get(container_name)
+            return self.client.containers.get(container_name)
 
         except docker.errors.NotFound:
             return None
@@ -147,77 +177,54 @@ class ContainerManager:
             logger.error("Error retrieving container: %s", e)
             return None
 
-    def run_container(self, ai_model, ai_model_version) -> Container | None:
-        """Legacy method kept for compatibility. Prefer create_and_start_container."""
-        if not self.is_connected() or self.__client is None:
-            return None
-
-        container_name: str = f"{ai_model.model}_{ai_model_version.parameters}"
-        network_name = "chatbot-network"
-        container_port = 11434 + ai_model.index
-        parameters = ai_model_version.parameters
-
-        if (container := self.get_container(container_name)) is not None:
-            if container.status == "running":
-                return container
-
-            container.start()
-
-            return container
-
-        self.close_any_container_on_port(str(container_port))
-
-        try:
-            container = self.__client.containers.create(
-                name=container_name,
-                image="ollama/ollama:latest",
-                detach=True,
-                ports={"11434/tcp": container_port},
-                network=network_name,
-                device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
-                hostname=container_name,
-                environment={
-                    "model": ai_model.model,
-                    "parameters": parameters,
-                    "port": container_port,
-                },
+    @staticmethod
+    def allocate_port(container_name: str) -> int:
+        """Return the host port owned by `container_name`, allocating the
+        lowest free port >= PORT_RANGE_START if it doesn't have one yet.
+        Locked so two concurrent container creations can't both compute the
+        same free port and collide.
+        """
+        with transaction.atomic():
+            existing = (
+                ContainerPort.objects.select_for_update()
+                .filter(container_name=container_name)
+                .first()
             )
+            if existing is not None:
+                return existing.port
 
-        except docker.errors.DockerException as e:
-            logger.error("Error creating container: %s", e)
-            return None
+            used_ports = set(
+                ContainerPort.objects.select_for_update().values_list("port", flat=True)
+            )
+            port = PORT_RANGE_START
+            while port in used_ports:
+                port += 1
 
-        container.start()
-        time.sleep(2)
-        try:
-            container.exec_run(f"ollama pull {ai_model.model}:{parameters}", detach=True)
-        except docker.errors.DockerException as e:
-            logger.warning("Failed to exec ollama pull: %s", e)
-
-        return container
+            ContainerPort.objects.create(container_name=container_name, port=port)
+            return port
 
     def create_and_start_container(
         self,
         model_name: str,
         parameters: str,
-        model_index: int,
     ) -> tuple[Container | None, int | None]:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return None, None
 
         container_name = f"{model_name}_{parameters}"
         network_name = "chatbot-network"
-        container_port = 11434 + model_index
 
         if (container := self.get_container(container_name)) is not None:
             if container.status != "running":
                 container.start()
-            return container, container_port
+                container.reload()
+            container_port = ContainerManager.get_container_environment_variable(container, "port")
+            return container, int(container_port) if container_port else None
 
-        self.close_any_container_on_port(str(container_port))
+        container_port = ContainerManager.allocate_port(container_name)
 
         try:
-            container = self.__client.containers.create(
+            container = self.client.containers.create(
                 name=container_name,
                 image="ollama/ollama:latest",
                 detach=True,
@@ -236,12 +243,11 @@ class ContainerManager:
             return None, None
 
         container.start()
+        container.reload()
         return container, container_port
 
-    def wait_for_ollama_ready(self, host_port: int, timeout: int = 60) -> bool:
-        is_docker = os.getenv("DOCKER", "false") == "true"
-        host = "host.docker.internal" if is_docker else "localhost"
-        url = f"http://{host}:{host_port}/api/version"
+    def wait_for_ollama_ready(self, base_url: str, timeout: int = 60) -> bool:
+        url = f"{base_url}/api/version"
 
         start = time.time()
         while time.time() - start < timeout:
@@ -249,7 +255,7 @@ class ContainerManager:
                 r = requests.get(url, timeout=2)
                 if r.status_code == 200:
                     return True
-            except Exception:
+            except requests.exceptions.RequestException:
                 pass
             time.sleep(1)
 
@@ -259,12 +265,16 @@ class ContainerManager:
         self,
         model: str,
         parameters: str,
-        host_port: int,
+        base_url: str,
         progress_cb: typing.Callable | None = None,
-    ) -> bool:
-        is_docker = os.getenv("DOCKER", "false") == "true"
-        host = "host.docker.internal" if is_docker else "localhost"
-        url = f"http://{host}:{host_port}/api/pull"
+    ) -> tuple[bool, str | None]:
+        """Returns (success, error_message). Ollama's /api/pull streams
+        `{"error": "..."}` on failure (bad tag, manifest not found, disk
+        full) with a 200 status — the request never raises on its own, so
+        every line has to be checked for an "error" key or a failed pull
+        silently reports 100% / "Model ready" like a success.
+        """
+        url = f"{base_url}/api/pull"
 
         try:
             layer_totals: dict[str, int] = {}
@@ -277,6 +287,8 @@ class ContainerManager:
                 stream=True,
                 timeout=600,
             ) as resp:
+                resp.raise_for_status()
+
                 for line in resp.iter_lines():
                     if not line:
                         continue
@@ -284,6 +296,10 @@ class ContainerManager:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+
+                    if error := event.get("error"):
+                        logger.error("Ollama reported a pull error for %s:%s: %s", model, parameters, error)
+                        return False, error
 
                     status = event.get("status", "")
                     digest = event.get("digest", "")
@@ -315,18 +331,18 @@ class ContainerManager:
 
             if progress_cb:
                 progress_cb(100, "Model ready")
-            return True
+            return True, None
 
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             logger.error("Error pulling model %s:%s: %s", model, parameters, e)
-            return False
+            return False, str(e)
 
     def get_network(self, network_name: str) -> Network | None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return None
 
         try:
-            return self.__client.networks.get(network_name)
+            return self.client.networks.get(network_name)
 
         except docker.errors.NotFound:
             return None
@@ -336,45 +352,36 @@ class ContainerManager:
             return None
 
     def create_network(self, network_name: str) -> Network | None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return None
 
         try:
-            return self.__client.networks.create(network_name, driver="bridge")
+            return self.client.networks.create(network_name, driver="bridge")
 
         except docker.errors.DockerException as e:
             logger.error("Error creating network: %s", e)
             return None
 
-    def close_any_container_on_port(self, port: str) -> None:
-        if not self.is_connected() or self.__client is None:
-            return None
-
-        all_containers: list[Container] = self.__client.containers.list(
-            all=True, filters={"ancestor": "ollama/ollama:latest"}
-        )
-
-        for container in all_containers:
-            if (
-                ContainerManager.get_container_environment_variable(container, "port")
-                == port
-            ):
-                container.stop()
-
     def stop_container(self, container_name: str) -> None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return
 
         if (container := self.get_container(container_name)) is not None:
-            container.stop()
+            try:
+                container.stop()
+            except docker.errors.APIError as e:
+                logger.warning("Error stopping container %s: %s", container_name, e)
 
     def remove_container(self, container_name: str) -> None:
-        if not self.is_connected() or self.__client is None:
+        if not self.is_connected() or self.client is None:
             return
 
         if (container := self.get_container(container_name)) is not None:
-            container.stop()
-            container.remove()
+            try:
+                container.stop()
+                container.remove()
+            except docker.errors.APIError as e:
+                logger.warning("Error removing container %s: %s", container_name, e)
 
     def is_model_pulling(self, model: str, parameters: str) -> bool:
         container_name = f"{model}_{parameters}"
@@ -383,21 +390,33 @@ class ContainerManager:
             return False
         return ContainerManager.is_pulling_model(container)
 
-    def get_container_port(self, model: str, parameters: str) -> str | None:
-        if not self.is_connected() or self.__client is None:
-            return
+    def get_ollama_base_url(self, model: str, parameters: str) -> str | None:
+        """The URL this server should use to reach the model's container.
 
+        In Docker mode this server is itself a container on the same
+        `chatbot-network` bridge, so it addresses the target directly by
+        container name over Docker's internal DNS — no host port needed,
+        and no `host.docker.internal`, which isn't resolvable on Linux
+        Docker Engine without an `extra_hosts` entry docker-compose.yaml
+        doesn't set (this breaks the whole app on Linux today).
+
+        Outside Docker (`python manage.py runserver` on the host, container
+        management still going through the Docker socket), there's no
+        shared network to piggyback on, so it has to go through the
+        allocated host-published port instead.
+        """
         container_name = f"{model}_{parameters}"
-        if (
-            container := self.get_container(container_name)
-        ) is None or container.status != "running":
-            return
+        container = self.get_container(container_name)
+        if container is None or container.status != "running":
+            return None
 
-        container_port = ContainerManager.get_container_environment_variable(
-            container, "port"
-        )
+        if os.getenv("DOCKER", "false") == "true":
+            return f"http://{container_name}:11434"
 
-        return container_port
+        host_port = ContainerManager.get_container_environment_variable(container, "port")
+        if host_port is None:
+            return None
+        return f"http://localhost:{host_port}"
 
     @staticmethod
     def map_container(
@@ -441,6 +460,10 @@ class ContainerManager:
             )
 
         except (KeyError, IndexError):
+            return False
+        except docker.errors.APIError:
+            # Container stopped between the caller's status check and this
+            # call — not pulling if it's not even running.
             return False
 
     @staticmethod

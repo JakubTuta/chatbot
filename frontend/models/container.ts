@@ -5,4 +5,5 @@ export interface IContainer {
   status: string
   parameters: string
   canProcessImages: boolean
+  canUseTools: boolean
 }

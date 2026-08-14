@@ -139,22 +139,39 @@ export const useContainerStore = defineStore('container', () => {
     }
   }
 
-  const checkDockerConnection = async () => {
+  type SystemStatus = 'ok' | 'docker_down' | 'backend_unreachable'
+
+  const checkSystemStatus = async (): Promise<SystemStatus> => {
     const url = '/docker/'
 
     try {
       const response = await api.value.get(url)
 
       return response.status === 200
+        ? 'ok'
+        : 'docker_down'
     }
     catch (error: any) {
       console.error(error)
 
-      return false
+      // No `response` at all (or ERR_NETWORK) means the request never got
+      // a reply from Django — the backend itself is down, not Docker.
+      // A `response` (4xx/5xx) means Django answered and Docker is what's
+      // unreachable. Collapsing both into "Docker is not running" sent
+      // users to restart Docker Desktop forever when the real problem was
+      // the backend container being down.
+      if (!error.response || error.code === 'ERR_NETWORK')
+        return 'backend_unreachable'
+
+      return 'docker_down'
     }
   }
 
-  const getUserContainers = async () => {
+  // A hoisted function declaration, like scheduleNextPoll/stopPolling
+  // above — the two call each other (this reschedules the next poll,
+  // scheduleNextPoll's timeout calls this), so neither can be a `const`
+  // without one of them referencing the other before it's defined.
+  async function getUserContainers() {
     const url = '/docker/containers/'
 
     try {
@@ -248,7 +265,7 @@ export const useContainerStore = defineStore('container', () => {
     pullProgress,
     scrapeProgress,
     resetState,
-    checkDockerConnection,
+    checkSystemStatus,
     getUserContainers,
     runContainer,
     stopContainer,

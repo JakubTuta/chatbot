@@ -1,431 +1,599 @@
+<script setup lang="ts">
+const hardwareStore = useHardwareStore()
+const { hardware, diskUsage } = storeToRefs(hardwareStore)
+
+onMounted(() => {
+  hardwareStore.fetchDiskUsage()
+  hardwareStore.fetchHardware()
+})
+
+function formatBytesOrUnknown(bytes: number | null): string {
+  return bytes === null
+    ? '—'
+    : formatBytes(bytes)
+}
+</script>
+
 <template>
-  <div class="landing-page">
-    <!-- Hero Section with Background Gradient -->
-    <div class="hero-section">
-      <div class="hero-content">
-        <h1 class="main-title">
-          Welcome to <span class="highlight">OllamaChat</span>
-        </h1>
+  <AppTopBar />
 
-        <p class="subtitle">
-          Your gateway to local AI conversations
-        </p>
+  <div class="home-page">
+    <div class="home-inner">
+      <SystemStatusBanner style="margin-top: 16px" />
 
-        <div class="action-buttons">
-          <NuxtLink to="/chat">
+      <!-- ── Hero ── -->
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="mono-kicker hero-kicker">
+            Local only · No account · Your machine
+          </div>
+
+          <h1 class="hero-headline">
+            A proper chat UI for the models running on your own machine
+          </h1>
+
+          <p class="hero-body">
+            ReiChat sits on top of Ollama — install models with one click, keep organised
+            conversation history, reference your own files, and compare models side by side, all
+            without your data ever leaving this computer.
+          </p>
+
+          <div class="hero-buttons">
             <v-btn
-              color="primary"
+              to="/chat"
+              color="mint-btn"
+              variant="flat"
+              rounded="lg"
               size="large"
-              class="get-started-btn"
-              elevation="2"
             >
-              Get Started
+              Get started →
             </v-btn>
-          </NuxtLink>
 
-          <NuxtLink to="/models">
             <v-btn
+              to="/models"
               variant="outlined"
-              color="primary"
+              rounded="lg"
               size="large"
-              class="explore-btn"
             >
-              Explore Models
+              Explore models
             </v-btn>
-          </NuxtLink>
-        </div>
-      </div>
-
-      <!-- Decorative AI chat bubble illustration -->
-      <div class="hero-illustration">
-        <div class="chat-bubble user-bubble">
-          That's amazing!
-        </div>
-
-        <div class="chat-bubble ai-bubble mt-7">
-          I run locally on your machine!
-        </div>
-
-        <div class="chat-bubble user-bubble">
-          How does this work?
-        </div>
-      </div>
-    </div>
-
-    <!-- Features Section -->
-    <div class="features-section">
-      <h2 class="section-title">
-        Why Choose OllamaChat?
-      </h2>
-
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">
-            <v-icon
-              size="36"
-              color="primary"
-            >
-              mdi-security
-            </v-icon>
           </div>
 
-          <h3>Privacy First</h3>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <span class="hero-stat-value">{{ diskUsage.models.length }}</span>
 
-          <p>All conversations stay on your device. No data sent to external services.</p>
+              <span class="mono-kicker">on this machine</span>
+            </div>
+
+            <div class="hero-stat">
+              <span class="hero-stat-value">{{ formatBytes(diskUsage.total_bytes) }}</span>
+
+              <span class="mono-kicker">disk used by models</span>
+            </div>
+
+            <div class="hero-stat">
+              <span class="hero-stat-value">{{ formatBytesOrUnknown(hardware.ram_bytes) }} / {{ formatBytesOrUnknown(hardware.vram_bytes) }}</span>
+
+              <span class="mono-kicker">ram / vram detected</span>
+            </div>
+          </div>
         </div>
 
-        <div class="feature-card">
-          <div class="feature-icon">
-            <v-icon
-              size="36"
-              color="primary"
-            >
-              mdi-docker
-            </v-icon>
+        <div class="hero-shot">
+          <div class="hero-shot-frame">
+            <div class="mock-window-dots">
+              <span />
+
+              <span />
+
+              <span />
+            </div>
+
+            <div class="mock-row">
+              <span class="mock-dot" />
+
+              <div class="mock-lines">
+                <span
+                  class="mock-line"
+                  style="width: 88%"
+                />
+
+                <span
+                  class="mock-line"
+                  style="width: 62%"
+                />
+              </div>
+            </div>
+
+            <div class="mock-trace font-mono">
+              <span class="mock-trace-name">get_current_time</span>() → "14:32"
+            </div>
+
+            <div class="mock-row mock-row--user">
+              <span class="mock-bubble" />
+            </div>
+
+            <div class="mock-row">
+              <span class="mock-dot" />
+
+              <div class="mock-lines">
+                <span
+                  class="mock-line"
+                  style="width: 74%"
+                />
+              </div>
+            </div>
           </div>
 
-          <h3>Simple Management</h3>
+          <div class="hero-shot-caption mono-kicker">
+            Product shot — chat with tool trace
+          </div>
+        </div>
+      </section>
 
-          <p>Effortlessly manage Docker containers hosting your AI models.</p>
+      <!-- ── How the pieces fit ── -->
+      <section class="pieces">
+        <div class="piece-box">
+          Docker
         </div>
 
-        <div class="feature-card">
-          <div class="feature-icon">
-            <v-icon
-              size="36"
-              color="primary"
-            >
-              mdi-robot
-            </v-icon>
-          </div>
+        <span class="piece-arrow font-mono">→</span>
 
-          <h3>Multiple Models</h3>
-
-          <p>Switch between different AI models based on your specific needs.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- How It Works Section -->
-    <div class="how-section">
-      <h2 class="section-title">
-        Get started in 3 steps
-      </h2>
-
-      <div class="steps-grid">
-        <div class="step-card">
-          <div class="step-number">
-            1
-          </div>
-
-          <v-icon
-            size="32"
-            color="primary"
-            class="mb-3"
-          >
-            mdi-docker
-          </v-icon>
-
-          <h3>Install &amp; start Docker</h3>
-
-          <p>Download Docker Desktop and start it. The app uses Docker to run AI models in isolated containers.</p>
+        <div class="piece-box">
+          Ollama
         </div>
 
-        <div class="step-card">
-          <div class="step-number">
-            2
+        <span class="piece-arrow font-mono">→</span>
+
+        <div class="piece-box piece-box--active">
+          ReiChat
+        </div>
+      </section>
+
+      <!-- ── Explainer panels ── -->
+      <section class="explainer-grid">
+        <div class="panel">
+          <div class="mono-kicker panel-kicker">
+            What is Ollama?
           </div>
 
-          <v-icon
-            size="32"
-            color="primary"
-            class="mb-3"
-          >
-            mdi-download
-          </v-icon>
+          <h3 class="panel-title">
+            The engine underneath
+          </h3>
 
-          <h3>Pull a model</h3>
+          <p class="panel-body">
+            <a
+              href="https://ollama.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Ollama</a> is a free tool that runs open-source AI language models — Llama, Mistral,
+            Gemma, Qwen and more — directly on your CPU or GPU. No account, no API key, no
+            per-message cost.
+          </p>
+        </div>
 
-          <p>
-            Go to the <NuxtLink
+        <div class="panel">
+          <div class="mono-kicker panel-kicker">
+            What ReiChat adds
+          </div>
+
+          <h3 class="panel-title">
+            A proper interface
+          </h3>
+
+          <p class="panel-body">
+            Ollama by itself is a command-line tool. ReiChat gives it a chat interface: install
+            models with one click, keep organised history, reference your own files, and compare
+            models side by side.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="mono-kicker panel-kicker">
+            Why local
+          </div>
+
+          <h3 class="panel-title">
+            Privacy, with trade-offs
+          </h3>
+
+          <p class="panel-body">
+            Nothing you type leaves this machine — no cloud, no data collection, works offline once
+            a model is downloaded. In exchange, local models are typically smaller and slower than
+            the largest cloud ones, and need free disk space and RAM.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Get started in three steps ── -->
+      <section class="steps-section">
+        <h2 class="section-title">
+          Get started in three steps
+        </h2>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">
+              1
+            </div>
+
+            <h3 class="step-title">
+              Install &amp; start Docker
+            </h3>
+
+            <p class="step-body">
+              Download Docker Desktop and start it. ReiChat uses Docker to run each AI model in its
+              own isolated container.
+            </p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-number">
+              2
+            </div>
+
+            <h3 class="step-title">
+              Pull a model
+            </h3>
+
+            <p class="step-body">
+              Pick a model, select a version and click <strong>Create container</strong> — it
+              downloads automatically.
+            </p>
+
+            <NuxtLink
               to="/models"
               class="step-link"
             >
-              Models page
+              Go to Models →
             </NuxtLink>
-
-            , pick a model (e.g. <em>llama3</em>
-
-            ), select a version and click <strong>Create container</strong>. The model downloads automatically.
-          </p>
-        </div>
-
-        <div class="step-card">
-          <div class="step-number">
-            3
           </div>
 
-          <v-icon
-            size="32"
-            color="primary"
-            class="mb-3"
-          >
-            mdi-chat
-          </v-icon>
+          <div class="step-card">
+            <div class="step-number">
+              3
+            </div>
 
-          <h3>Start chatting</h3>
+            <h3 class="step-title">
+              Start chatting
+            </h3>
 
-          <p>
-            Once the container shows <strong>Running</strong>
+            <p class="step-body">
+              Once the container shows <strong>Running</strong>, your model is ready and waiting.
+            </p>
 
-            , head to the <NuxtLink
+            <NuxtLink
               to="/chat"
               class="step-link"
             >
-              Chat page
-            </NuxtLink> — your model will be ready and waiting.
-          </p>
+              Open Chat →
+            </NuxtLink>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <!-- Call to Action Section -->
-    <div class="cta-section">
-      <div class="cta-content">
-        <h2>Ready to start chatting?</h2>
+      <!-- ── Closing CTA ── -->
+      <section class="cta-block">
+        <h2 class="cta-headline">
+          Ready to start chatting?
+        </h2>
 
-        <p>Join our community and explore the power of local AI conversations.</p>
+        <p class="cta-body">
+          Everything runs on this machine — open a chat or browse the model catalogue to get set up.
+        </p>
 
         <div class="cta-buttons">
-          <NuxtLink to="/chat">
-            <v-btn
-              color="primary"
-              class="mx-2"
-            >
-              Open Chat
-            </v-btn>
-          </NuxtLink>
+          <v-btn
+            to="/chat"
+            variant="flat"
+            rounded="lg"
+            style="background: oklch(0.32 0.05 168); color: white"
+          >
+            Open chat
+          </v-btn>
 
-          <NuxtLink to="/models">
-            <v-btn
-              color="secondary"
-              class="mx-2"
-            >
-              Browse Models
-            </v-btn>
-          </NuxtLink>
+          <v-btn
+            to="/models"
+            variant="outlined"
+            rounded="lg"
+            style="border-color: oklch(0.5 0.09 168 / .4); color: oklch(0.3 0.06 168)"
+          >
+            Browse models
+          </v-btn>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-.landing-page {
+.home-page {
   min-height: 100vh;
-  font-family: 'Inter', sans-serif;
-  color: #e0e0e0;
-  background-color: #121212;
 }
 
-/* Hero Section */
-.hero-section {
-  display: flex;
+.home-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+/* ── Hero ── */
+.hero {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 44px;
+  padding: 7vh 0 6vh;
   align-items: center;
-  justify-content: space-between;
-  padding: 4rem 8%;
-  background: linear-gradient(135deg, #1a1f35 0%, #0d1425 100%);
-  border-radius: 0 0 50px 50px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
-.hero-content {
-  max-width: 600px;
+.hero-kicker {
+  margin-bottom: 14px;
 }
 
-.main-title {
-  font-size: 3.5rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  background: linear-gradient(90deg, #4f8cff, #6b66ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  line-height: 1.2;
+.hero-headline {
+  font-size: 46px;
+  line-height: 1.1;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--color-ink);
+  margin: 0 0 18px;
 }
 
-.highlight {
-  color: #6b66ff;
+.hero-body {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--color-ink-2);
+  margin: 0 0 26px;
+  max-width: 46ch;
 }
 
-.subtitle {
-  font-size: 1.5rem;
-  color: #a0aec0;
-  margin-bottom: 2rem;
-}
-
-.action-buttons {
+.hero-buttons {
   display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
+  gap: 12px;
+  margin-bottom: 34px;
 }
 
-.get-started-btn {
-  padding: 0 2rem !important;
-}
-
-.explore-btn {
-  padding: 0 2rem !important;
-}
-
-/* Hero Illustration */
-.hero-illustration {
-  position: relative;
-  width: 320px;
-  height: 280px;
-}
-
-.chat-bubble {
-  position: absolute;
-  padding: 1rem 1.5rem;
-  border-radius: 18px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  max-width: 200px;
-  animation: float 6s ease-in-out infinite;
-}
-
-.user-bubble {
-  background-color: #2a3142;
-  color: #a9c2ff;
-  bottom: 20px;
-  left: 0;
-  animation-delay: 0.5s;
-}
-
-.user-bubble:nth-child(3) {
-  bottom: 180px;
-  left: 40px;
-  animation-delay: 1.5s;
-}
-
-.ai-bubble {
-  background-color: #4f46e5;
-  color: white;
-  top: 80px;
-  right: 0;
-  animation-delay: 1s;
-}
-
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
-}
-
-/* Features Section */
-.features-section {
-  padding: 5rem 8%;
-  text-align: center;
-}
-
-.section-title {
-  font-size: 2.2rem;
-  margin-bottom: 3rem;
-  color: #e0e0e0;
-}
-
-.features-grid {
+.hero-stats {
   display: flex;
-  justify-content: center;
-  gap: 2rem;
+  gap: 34px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-line);
   flex-wrap: wrap;
 }
 
-.feature-card {
-  background: #1e1e1e;
-  padding: 2rem;
-  border-radius: 16px;
-  width: 300px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.feature-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-}
-
-.feature-icon {
+.hero-stat {
   display: flex;
-  justify-content: center;
-  margin-bottom: 1.5rem;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.feature-card h3 {
-  font-size: 1.3rem;
-  margin-bottom: 1rem;
-  color: #e0e0e0;
+.hero-stat-value {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--color-ink);
 }
 
-.feature-card p {
-  color: #b0b0b0;
-  line-height: 1.6;
+.hero-shot {
+  background: var(--color-soft);
+  border-radius: 15px;
+  padding: 14px;
 }
 
-/* How It Works Section */
-.how-section {
-  padding: 5rem 8%;
+.hero-shot-frame {
+  height: 250px;
+  border-radius: 10px;
+  padding: 18px 20px;
+  background: var(--color-card);
+  border: 1px solid var(--color-line-2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.mock-window-dots {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.mock-window-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-line-2);
+}
+
+.mock-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mock-row--user {
+  justify-content: flex-end;
+}
+
+.mock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-mint);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.mock-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mock-line {
+  display: block;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--color-soft-2);
+}
+
+.mock-trace {
+  align-self: flex-start;
+  margin-left: 14px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--color-soft-2);
+  border: 1px solid var(--color-line-2);
+  font-size: 10.5px;
+  color: var(--color-ink-2);
+}
+
+.mock-trace-name {
+  color: var(--color-mint-deep);
+}
+
+.mock-bubble {
+  display: block;
+  width: 62%;
+  height: 30px;
+  border-radius: 12px 12px 3px 12px;
+  background: var(--color-mint-tint);
+}
+
+.hero-shot-caption {
   text-align: center;
-  background: #181818;
+  padding-top: 12px;
+}
+
+/* ── Pieces strip ── */
+.pieces {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 0 48px;
+}
+
+.piece-box {
+  padding: 10px 22px;
+  border-radius: 12px;
+  border: 1px solid var(--color-line-2);
+  background: var(--color-card);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink-2);
+}
+
+.piece-box--active {
+  background: var(--color-mint-tint);
+  border-color: var(--color-mint-border);
+  color: var(--color-ink);
+}
+
+.piece-arrow {
+  color: var(--color-ink-3);
+  font-size: 13px;
+}
+
+/* ── Explainer panels ── */
+.explainer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  padding-bottom: 60px;
+}
+
+.panel {
+  background: var(--color-soft);
+  border-radius: 15px;
+  padding: 22px;
+}
+
+.panel-kicker {
+  margin-bottom: 10px;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin: 0 0 8px;
+}
+
+.panel-body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--color-ink-2);
+  margin: 0;
+}
+
+.panel-body a {
+  color: var(--color-mint-deep);
+}
+
+/* ── Steps ── */
+.section-title {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  text-align: center;
+  margin: 0 0 30px;
+}
+
+.steps-section {
+  padding-bottom: 60px;
 }
 
 .steps-grid {
-  display: flex;
-  justify-content: center;
-  gap: 2rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
 }
 
 .step-card {
-  background: #1e1e1e;
-  padding: 2rem;
-  border-radius: 16px;
-  width: 300px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   position: relative;
+  background: var(--color-card);
+  border: 1px solid var(--color-line-2);
+  border-radius: 15px;
+  padding: 26px 20px 20px;
 }
 
 .step-number {
   position: absolute;
-  top: -16px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 32px;
+  top: -14px;
+  left: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #4f46e5;
-  color: white;
+  background: var(--color-mint-btn);
+  color: var(--color-mint-ink);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: 600;
+  font-size: 13px;
 }
 
-.step-card h3 {
-  font-size: 1.2rem;
-  margin-bottom: 0.75rem;
-  color: #e0e0e0;
+.step-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin: 4px 0 8px;
 }
 
-.step-card p {
-  color: #b0b0b0;
+.step-body {
+  font-size: 13px;
   line-height: 1.6;
-  font-size: 0.95rem;
+  color: var(--color-ink-2);
+  margin: 0 0 10px;
 }
 
 .step-link {
-  color: #a9c2ff;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-mint-deep);
   text-decoration: none;
 }
 
@@ -433,79 +601,53 @@
   text-decoration: underline;
 }
 
-/* CTA Section */
-.cta-section {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-  color: white;
-  padding: 4rem 8%;
+/* ── CTA ── */
+.cta-block {
+  background: var(--color-mint-tint);
+  border-radius: 20px;
+  padding: 30px 34px;
   text-align: center;
-  border-radius: 50px 50px 0 0;
-  margin-top: 2rem;
 }
 
-.cta-content h2 {
-  font-size: 2.2rem;
-  margin-bottom: 1rem;
+.cta-headline {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  margin: 0 0 8px;
 }
 
-.cta-content p {
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
-  opacity: 0.9;
+.cta-body {
+  font-size: 14px;
+  color: var(--color-ink-2);
+  margin: 0 0 20px;
 }
 
 .cta-buttons {
   display: flex;
   justify-content: center;
-  gap: 1rem;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.cta-buttons .v-btn {
-  color: white !important;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .hero-section {
-    flex-direction: column;
-    padding: 3rem 5%;
-    text-align: center;
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
   }
 
-  .hero-content {
-    max-width: 100%;
-    margin-bottom: 3rem;
-  }
-
-  .action-buttons {
-    justify-content: center;
-  }
-
-  .hero-illustration {
-    width: 280px;
+  .hero-shot {
+    order: -1;
   }
 }
 
-@media (max-width: 768px) {
-  .main-title {
-    font-size: 2.5rem;
+@media (max-width: 600px) {
+  .hero-headline {
+    font-size: 34px;
   }
 
-  .subtitle {
-    font-size: 1.2rem;
-  }
-
-  .features-grid {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .cta-section {
-    padding: 3rem 5%;
+  .pieces {
+    flex-wrap: wrap;
   }
 }
 </style>

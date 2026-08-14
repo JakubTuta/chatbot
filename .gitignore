@@ -24,12 +24,17 @@ Dockerfile.production
 # python
 __pycache__
 venv
+.pytest_cache
+.ruff_cache
 
 # trash
 test.*
 *.http
 .env
 .vscode
-*lock.json
-migrations
 .claude/
+
+# test output
+/frontend/test-results
+/frontend/playwright-report
+/frontend/coverage

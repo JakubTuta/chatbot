@@ -6,46 +6,44 @@ import 'vuetify/styles'
 export default defineNuxtPlugin((app) => {
   const vuetify = createVuetify({
     theme: {
-      defaultTheme: 'dark',
+      defaultTheme: 'reichat',
       themes: {
-        light: {
+        // Hex approximations of the oklch tokens in redesign/README.md —
+        // Vuetify computes elevation/state-layer overlays from parsed RGB,
+        // so this theme uses hex here. Raw component CSS uses the oklch
+        // custom properties from assets/css/main.css directly instead.
+        reichat: {
           dark: false,
           colors: {
-            'background': '#F4F5F9',
-            'surface': '#FFFFFF',
-            'surface-2': '#ECEEF4',
-            'primary': 'rgba(142, 147, 108, 1)',
-            'secondary': 'rgba(113, 108, 147, 1)',
-            'primary-transparent': 'rgba(142, 147, 108, 0.25)',
-            'secondary-transparent': 'rgba(113, 108, 147, 0.25)',
-            'league-blue': 'rgba(35, 167, 250, 1)',
-            'league-red': 'rgba(252, 38, 38, 1)',
-            'league-blue-transparent': 'rgba(35, 167, 250, 0.7)',
-            'league-red-transparent': 'rgba(252, 38, 38, 0.7)',
-            'chat-user': '#6366F1',
-            'chat-bot': '#ECEEF4',
-            'accent': '#6366F1',
-            'accent-2': '#818CF8',
+            'background': '#eaf3ef',
+            'on-background': '#26302d',
+            'surface': '#fbfefd',
+            'on-surface': '#26302d',
+            'surface-2': '#f6fbf9',
+            'soft-2': '#f1f8f5',
+            'line': '#dae5e1',
+            'line-2': '#e3ece9',
+            'line-dash': '#cdd9d5',
+            'ink-2': '#5f6b67',
+            'ink-3': '#7d8985',
+            'mint': '#3fc39c',
+            'mint-btn': '#61d0ad',
+            'mint-btn-hover': '#4bc7a2',
+            'mint-tint': '#dcf1e9',
+            'mint-deep': '#2a7462',
+            'mint-ink': '#153c32',
+            'mint-border': '#7bc4ae',
+            'grey-dot': '#adb8b4',
+            'primary': '#61d0ad',
+            'on-primary': '#153c32',
+            'amber': '#eba14a',
+            'warning': '#eba14a',
+            'red': '#d5504a',
+            'error': '#d5504a',
           },
-        },
-        dark: {
-          dark: true,
-          colors: {
-            'background': '#0E0F13',
-            'surface': '#1A1C22',
-            'surface-2': '#22242C',
-            'primary': 'rgba(142, 147, 108, 1)',
-            'secondary': 'rgba(113, 108, 147, 1)',
-            'primary-transparent': 'rgba(142, 147, 108, 0.25)',
-            'secondary-transparent': 'rgba(113, 108, 147, 0.25)',
-            'league-blue': 'rgba(35, 167, 250, 1)',
-            'league-red': 'rgba(252, 38, 38, 1)',
-            'league-blue-transparent': 'rgba(35, 167, 250, 0.7)',
-            'league-red-transparent': 'rgba(252, 38, 38, 0.7)',
-            'chat-user': '#6366F1',
-            'chat-bot': '#22242C',
-            'accent': '#6366F1',
-            'accent-2': '#818CF8',
+          variables: {
+            'border-color': '#dae5e1',
+            'border-opacity': 1,
           },
         },
       },
@@ -53,16 +51,30 @@ export default defineNuxtPlugin((app) => {
     defaults: {
       VTextField: {
         variant: 'outlined',
+        color: 'mint-deep',
       },
       VAutocomplete: {
         variant: 'outlined',
+        color: 'mint-deep',
       },
       VSelect: {
         variant: 'outlined',
+        color: 'mint-deep',
+      },
+      VTextarea: {
+        variant: 'outlined',
+        color: 'mint-deep',
+      },
+      VSwitch: {
+        color: 'mint-btn',
+      },
+      VCheckbox: {
+        color: 'mint-btn',
       },
       VBtn: {
         variant: 'outlined',
-        rounded: 'xl',
+        rounded: 'lg',
+        class: 'text-none',
       },
       VContainer: {
         style: 'max-width: 1200px',
@@ -72,7 +84,7 @@ export default defineNuxtPlugin((app) => {
         width: '100%',
       },
       VTab: {
-        rounded: 'xl',
+        rounded: 'lg',
       },
       VListItem: {
         rounded: 'lg',

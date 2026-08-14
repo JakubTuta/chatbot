@@ -1,8 +1,7 @@
 <script setup lang="ts">
+import type { IContainer } from '~/models/container'
 import { useDisplay } from 'vuetify'
-import { useThemeToggle } from '~/composables/useTheme'
 
-const { isDark, toggleTheme } = useThemeToggle()
 const { mobile } = useDisplay()
 
 const loading = ref(false)
@@ -16,12 +15,16 @@ const forceReset = ref(false)
 
 const confirmDeleteDialog = ref(false)
 const chatToDelete = ref<{ id: string } | null>(null)
+const searchDialogOpen = ref(false)
 
 const chatStore = useChatStore()
 const { aiModels, allChats } = storeToRefs(chatStore)
 
 const containerStore = useContainerStore()
 const { containers } = storeToRefs(containerStore)
+
+const hardwareStore = useHardwareStore()
+const { diskUsage } = storeToRefs(hardwareStore)
 
 onMounted(async () => {
   loading.value = true
@@ -33,6 +36,7 @@ onMounted(async () => {
     await containerStore.getUserContainers()
 
   containerStore.startPolling()
+  hardwareStore.fetchDiskUsage()
 
   loading.value = false
 })
@@ -40,6 +44,52 @@ onMounted(async () => {
 onUnmounted(() => {
   containerStore.stopPolling()
 })
+
+// Models the chat page can actually talk to: installed, non-embedding,
+// merged with their live container status. Drives both the top-bar model
+// pill and the auto-select-first-model watcher below.
+const userPulledModels = computed(() => {
+  if (!containers.value.length || !aiModels.value.length)
+    return []
+
+  return containers.value.map((container) => {
+    if (container.status === 'pulling_model')
+      return null
+
+    const containerModel = container.environment.model
+    const foundAIModel = aiModels.value.find(model => model.model === containerModel)
+
+    // Embedding-only models (e.g. nomic-embed-text) don't do chat completion —
+    // keep them out of the chat picker even if the user has installed one.
+    if (!foundAIModel || foundAIModel.is_embedding)
+      return null
+
+    return {
+      name: foundAIModel.name,
+      value: `${foundAIModel.model} - ${container.environment.parameters}`,
+      model: containerModel,
+      status: container.status,
+      parameters: container.environment.parameters,
+      canProcessImages: foundAIModel.can_process_image,
+      canUseTools: foundAIModel.can_use_tools,
+    } as IContainer
+  })
+    .filter(e => e !== null)
+    .sort((a, b) => a.value.localeCompare(b.value))
+})
+
+watch(userPulledModels, (newValue) => {
+  if (!newValue.length) {
+    selectedModel.value = null
+
+    return
+  }
+  const stillExists = selectedModel.value
+    && newValue.some(m => m.model === selectedModel.value!.model
+      && m.parameters === selectedModel.value!.parameters)
+  if (!stillExists)
+    selectedModel.value = newValue[0]
+}, { immediate: true })
 
 watch(selectedChatId, async (newChatId, oldChatId) => {
   if (!newChatId || !selectedModel.value || newChatId === oldChatId)
@@ -94,13 +144,15 @@ function isChangingMyTitle(chat: { id: string }) {
 }
 
 async function acceptChangeChatTitle(chat: { id: string, title: string }) {
-  if (!chat.title || !selectedModel.value)
+  const newTitle = temporaryChatTitle.value.trim()
+
+  if (!newTitle || !selectedModel.value)
     return
 
   loadingChangeChatTitle.value = true
 
   const model = selectedModel.value.model
-  await chatStore.changeChatTitle(model, chat, temporaryChatTitle.value)
+  await chatStore.changeChatTitle(model, chat, newTitle)
 
   loadingChangeChatTitle.value = false
   changingChatTitleId.value = ''
@@ -112,11 +164,35 @@ function cancelChangeChatTitle() {
   temporaryChatTitle.value = ''
 }
 
+// Vue collects an array of matches when a ref sits inside v-for, even
+// though only one row is ever in rename mode at a time — normalise either
+// shape defensively rather than assume which one shows up.
+const renameInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
+
 function addSpace() {
   if (!changingChatTitleId.value)
     return
 
-  temporaryChatTitle.value += ' '
+  const inputEl = Array.isArray(renameInputRef.value)
+    ? renameInputRef.value[0]
+    : renameInputRef.value
+
+  if (!inputEl) {
+    temporaryChatTitle.value += ' '
+
+    return
+  }
+
+  const start = inputEl.selectionStart ?? temporaryChatTitle.value.length
+  const end = inputEl.selectionEnd ?? start
+  const value = temporaryChatTitle.value
+
+  temporaryChatTitle.value = `${value.slice(0, start)} ${value.slice(end)}`
+
+  nextTick(() => {
+    inputEl.setSelectionRange(start + 1, start + 1)
+    inputEl.focus()
+  })
 }
 
 async function createNewChat(model: string) {
@@ -137,167 +213,152 @@ async function confirmDeleteChat() {
   if (!selectedModel.value || !chatToDelete.value)
     return
 
-  await chatStore.deleteChat(selectedModel.value.model, chatToDelete.value.id)
+  const deletedChatId = chatToDelete.value.id
+  const model = selectedModel.value.model
+  const succeeded = await chatStore.deleteChat(model, deletedChatId)
   chatToDelete.value = null
 
-  if (allChats.value[selectedModel.value.model]?.length)
-    selectedChatId.value = allChats.value[selectedModel.value.model][0].id.toString()
+  // On failure the chat is still in allChats — don't navigate away and
+  // imply something happened when the delete actually failed.
+  if (!succeeded || deletedChatId !== selectedChatId.value)
+    return
+
+  if (allChats.value[model]?.length)
+    selectedChatId.value = allChats.value[model][0].id.toString()
   else
-    await createNewChat(selectedModel.value.model)
+    await createNewChat(model)
 }
 
 function cancelDeleteChat() {
   confirmDeleteDialog.value = false
   chatToDelete.value = null
 }
+
+function handleSearchSelect(chatId: string) {
+  changeChat({ id: chatId })
+}
 </script>
 
 <template>
-  <v-app-bar
-    flat
-    elevation="0"
-    border="b"
-    class="frosted-bar"
-  >
-    <v-app-bar-nav-icon
-      v-if="selectedModel"
-      @click="isShowDrawer = !isShowDrawer"
-    />
-
-    <v-app-bar-title>
-      <span class="app-title">OllamaChat</span>
-    </v-app-bar-title>
-
+  <AppTopBar>
     <template #append>
-      <v-btn
-        variant="text"
-        rounded="xl"
-        to="/"
-      >
-        Home
-      </v-btn>
-
-      <v-btn
-        variant="text"
-        rounded="xl"
-        to="/models"
-        class="mr-1"
-      >
-        Models
-      </v-btn>
-
-      <v-btn
-        icon
-        variant="text"
-        :title="isDark
-          ? 'Switch to light mode'
-          : 'Switch to dark mode'"
-        @click="toggleTheme"
-      >
-        <v-icon>
-          {{ isDark
-            ? 'mdi-weather-sunny'
-            : 'mdi-weather-night' }}
-        </v-icon>
-      </v-btn>
+      <ModelPillMenu
+        v-model="selectedModel"
+        :models="userPulledModels"
+      />
     </template>
-  </v-app-bar>
+  </AppTopBar>
 
   <v-navigation-drawer
     v-if="selectedModel"
     v-model="isShowDrawer"
     :temporary="mobile"
-    width="280"
+    width="262"
     class="chat-drawer"
   >
-    <div class="align-center d-flex justify-space-between px-4 pb-2 pt-4">
-      <span class="text-medium-emphasis font-weight-medium text-caption drawer-label tracking-widest">
-        CONVERSATIONS
-      </span>
+    <div class="drawer-header">
+      <span class="mono-kicker">Chats · {{ selectedModel.name }}</span>
 
-      <v-btn
-        icon="mdi-plus"
-        variant="text"
-        size="small"
-        title="New chat"
-        class="new-chat-btn"
-        @click="createNewChat(selectedModel!.model)"
-      />
+      <div class="drawer-header-actions">
+        <button
+          type="button"
+          class="drawer-icon-btn"
+          title="Search chats"
+          aria-label="Search chats"
+          @click="searchDialogOpen = true"
+        >
+          <v-icon size="15">
+            mdi-magnify
+          </v-icon>
+        </button>
+
+        <button
+          type="button"
+          class="drawer-icon-btn drawer-icon-btn--mint"
+          title="New chat"
+          @click="createNewChat(selectedModel!.model)"
+        >
+          <v-icon size="15">
+            mdi-plus
+          </v-icon>
+        </button>
+      </div>
     </div>
 
-    <v-divider />
-
-    <v-list
-      density="compact"
-      nav
-      class="px-2 pt-2"
-    >
-      <v-list-item
+    <div class="drawer-list">
+      <div
         v-for="chat in allChats[selectedModel.model] || []"
         :key="chat.id"
-        :ripple="!isChangingMyTitle(chat)"
-        :active="selectedChatId === chat.id.toString()"
-        active-color="primary"
-        rounded="lg"
-        min-height="44"
-        class="chat-list-item"
-        :class="{'chat-list-item--active': selectedChatId === chat.id.toString()}"
+        class="drawer-row"
+        :class="{'drawer-row--active': selectedChatId === chat.id.toString()}"
         @click="changeChat(chat)"
       >
-        <template #title>
-          <v-text-field
-            v-if="isChangingMyTitle(chat)"
-            v-model="temporaryChatTitle"
-            :loading="loadingChangeChatTitle"
-            density="compact"
-            variant="plain"
-            hide-details
-            autofocus
-            @keydown.enter="acceptChangeChatTitle(chat)"
-            @keydown.esc="cancelChangeChatTitle"
-            @keydown.space.prevent="addSpace"
-          />
+        <input
+          v-if="isChangingMyTitle(chat)"
+          ref="renameInputRef"
+          v-model="temporaryChatTitle"
+          class="drawer-rename-input"
+          autofocus
+          @click.stop
+          @keydown.enter="acceptChangeChatTitle(chat)"
+          @keydown.esc="cancelChangeChatTitle"
+          @keydown.space.prevent="addSpace"
+        >
 
-          <span
-            v-else
-            class="d-block text-truncate"
-            style="max-width: 152px; font-size: 0.875rem"
-          >
-            {{ chat.title }}
-          </span>
-        </template>
+        <span
+          v-else
+          class="drawer-row-title"
+        >
+          {{ chat.title }}
+        </span>
 
-        <template #append>
+        <div class="drawer-row-actions">
           <template v-if="!isChangingMyTitle(chat)">
-            <v-btn
-              icon="mdi-pencil"
-              variant="text"
-              size="x-small"
-              class="drawer-action-btn"
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              title="Rename chat"
+              aria-label="Rename chat"
               @click.stop="changeChatTitle(chat)"
-            />
+            >
+              <v-icon size="13">
+                mdi-pencil
+              </v-icon>
+            </button>
 
-            <v-btn
-              icon="mdi-delete"
-              variant="text"
-              size="x-small"
-              color="error"
-              class="drawer-action-btn"
+            <button
+              type="button"
+              class="drawer-icon-btn drawer-icon-btn--danger"
+              title="Delete chat"
+              aria-label="Delete chat"
               @click.stop="deleteChat(chat)"
-            />
+            >
+              <v-icon size="13">
+                mdi-close
+              </v-icon>
+            </button>
           </template>
 
-          <v-btn
+          <button
             v-else
-            icon="mdi-close"
-            variant="text"
-            size="x-small"
-            color="error"
+            type="button"
+            class="drawer-icon-btn drawer-icon-btn--danger"
+            title="Cancel rename"
+            aria-label="Cancel rename"
+            :disabled="loadingChangeChatTitle"
             @click.stop="cancelChangeChatTitle()"
-          />
-        </template>
-      </v-list-item>
-    </v-list>
+          >
+            <v-icon size="13">
+              mdi-close
+            </v-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-footer mono-kicker">
+      {{ diskUsage.models.length }} installed · {{ formatBytes(diskUsage.total_bytes) }}
+    </div>
   </v-navigation-drawer>
 
   <ConfirmDialog
@@ -305,9 +366,16 @@ function cancelDeleteChat() {
     title="Delete chat"
     message="Are you sure you want to delete this chat? This action cannot be undone."
     confirm-label="Delete"
-    confirm-color="error"
+    confirm-color="red"
     @confirm="confirmDeleteChat"
     @cancel="cancelDeleteChat"
+  />
+
+  <SearchDialog
+    v-if="selectedModel"
+    v-model="searchDialogOpen"
+    :model="selectedModel.model"
+    @select="handleSearchSelect"
   />
 
   <div class="chat-page-content">
@@ -316,7 +384,10 @@ function cancelDeleteChat() {
       class="d-flex align-center justify-center"
       style="height: 100%"
     >
-      <v-progress-circular indeterminate />
+      <v-progress-circular
+        indeterminate
+        color="mint"
+      />
     </div>
 
     <template v-else>
@@ -324,6 +395,7 @@ function cancelDeleteChat() {
 
       <ChatCard
         v-model:selected-model="selectedModel"
+        v-model:drawer-open="isShowDrawer"
         :reset="forceReset"
         :selected-chat-id="selectedChatId"
         @soft-reset="softReset"
@@ -333,81 +405,142 @@ function cancelDeleteChat() {
 </template>
 
 <style scoped>
-/* Frosted app bar */
-.frosted-bar {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(var(--v-theme-surface), 0.82) !important;
-}
-
-/* Gradient app title */
-.app-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #6366F1, #818CF8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 /* Drawer */
 .chat-drawer {
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--color-soft) !important;
+  border-color: var(--color-line-2) !important;
 }
 
-.drawer-label {
-  letter-spacing: 0.08em;
+/* Vuetify's default-slot wrapper (.v-navigation-drawer__content) isn't a
+   flex container on its own — without this, .drawer-list's `flex: 1` has
+   no effect and .drawer-footer ends up right after the chat list instead
+   of pinned to the bottom of the drawer. */
+.chat-drawer :deep(.v-navigation-drawer__content) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
-.new-chat-btn {
-  color: #6366F1 !important;
-  transition: transform 0.5s ease;
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 8px;
 }
 
-.new-chat-btn:hover {
+.drawer-header-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.drawer-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.5s ease;
+}
+
+.drawer-icon-btn:hover {
+  background: var(--color-line-2);
+}
+
+.drawer-icon-btn--mint {
+  color: var(--color-mint-deep);
+}
+
+.drawer-icon-btn--mint:hover {
   transform: rotate(90deg);
 }
 
-/* Chat list items */
-.chat-list-item {
+.drawer-icon-btn--danger:hover {
+  color: var(--color-red);
+}
+
+.drawer-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
-.chat-list-item--active {
-  border-left: 2px solid #6366F1;
+.drawer-row:hover {
+  background: oklch(0.93 0.02 168);
 }
 
-/* Hide action buttons until hover */
-.drawer-action-btn {
-  opacity: 0;
-  pointer-events: none;
+.drawer-row--active {
+  background: var(--color-mint-tint);
+}
+
+.drawer-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--color-ink);
+}
+
+.drawer-row-actions {
+  display: flex;
+  gap: 0;
+  flex-shrink: 0;
+  opacity: 0.4;
   transition: opacity 0.15s ease;
 }
 
-.chat-list-item:hover .drawer-action-btn {
+.drawer-row:hover .drawer-row-actions,
+.drawer-row:focus-within .drawer-row-actions {
   opacity: 1;
-  pointer-events: auto;
 }
 
-/* Always show on touch */
-@media (hover: none) {
-  .drawer-action-btn {
-    opacity: 1;
-    pointer-events: auto;
-  }
+.drawer-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-line-2);
+  flex-shrink: 0;
 }
 
 /* Chat page layout */
 .chat-page-content {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 64px);
+  height: calc(100dvh - 56px);
   padding: 12px 24px 16px;
   overflow: hidden;
 }
 
 .chat-page-banner {
   flex-shrink: 0;
-  margin-bottom: 8px;
 }
 </style>

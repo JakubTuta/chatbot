@@ -1,20 +1,12 @@
-# Chatbot
+# ReiChat
 
-## Overview
+**A friendly chat app for running AI models on your own computer — no account, no API key, no
+subscription, and no data leaving your machine.**
 
-**Chatbot** is a self-hosted web app for running and chatting with Large Language Models (LLMs) locally using Docker and Ollama. No cloud required — your data stays on your machine.
-
----
-
-## Features
-
-- **Local LLM execution** — run models via Ollama in Docker containers
-- **Real-time chat** — streaming responses over WebSocket
-- **Model management** — browse, pull, and run models from the Ollama library
-- **Multi-user support** — JWT authentication with per-user chat history
-- **Image input** — send images to vision-capable models
-- **Structured output** — have models respond in a defined JSON schema
-- **Docker management** — start, stop, and remove containers directly from the UI
+Under the hood it runs [Ollama](https://ollama.com), the free tool that lets you download and run
+open-source AI models like Llama, Mistral, Gemma and Qwen locally. ReiChat adds the parts Ollama
+doesn't have on its own: a one-click model browser, real chat history, document Q&A, and more —
+all in your browser.
 
 ---
 
@@ -28,11 +20,28 @@
 
 ---
 
-## Quick Start (Docker — recommended)
+## What you can do here
 
-### Prerequisites
+- **Chat** with any model you install, with full conversation history, editable messages, and
+  regenerate/branch support.
+- **Compare models** — run the same prompt across several installed models side by side.
+- **Chat with your documents** — upload a PDF, Markdown, text or Word file and ask questions about
+  it.
+- **Tool calling** — let a supporting model use built-in tools (calculator, current date/time), or
+  connect your own via [MCP](https://modelcontextprotocol.io).
+- **Prompt templates** — save reusable starter messages with fill-in-the-blank placeholders.
+- **Vision models** — attach an image to your message for models that support it.
 
-- [Docker](https://www.docker.com/) installed and running
+---
+
+## Requirements
+
+Just [Docker](https://www.docker.com/) (Docker Desktop bundles everything you need, including
+Docker Compose).
+
+---
+
+## Quick start
 
 ### 1. Clone the repository
 
@@ -47,7 +56,9 @@ cd chatbot
 cp django_server/.env.example django_server/.env
 ```
 
-The defaults in `.env.example` work out of the box for a local Docker setup. You only need to change `SECRET_KEY` for any serious use.
+The bundled defaults work out of the box. If you plan to keep this running long-term, open the new
+`.env` file and replace `SECRET_KEY` with your own (generate one at
+[djecrety.ir](https://djecrety.ir/)) — the example file ships with a public, checked-in key.
 
 ### 3. Start the app
 
@@ -55,93 +66,63 @@ The defaults in `.env.example` work out of the box for a local Docker setup. You
 docker-compose up -d
 ```
 
-| Service    | URL                      |
-|------------|--------------------------|
-| Frontend   | http://localhost:3000    |
-| Backend    | http://localhost:8000    |
-| PostgreSQL | localhost:5432           |
+Open **http://localhost:3000** in your browser. Everything runs on `127.0.0.1` only — nothing here
+is reachable from another device on your network.
 
-### GPU support (optional, increases model performance)
+---
+
+## First run: install a model and chat
+
+1. **Open the app.** The landing page shows a status banner if Docker or the backend isn't
+   reachable yet, so you always know what's going on.
+2. **Go to Models.** A starter catalog of popular models loads immediately. Press
+   **Refresh model list** any time to pull the current list from ollama.com.
+3. **Pick a model sized for your machine.** Each version shows its exact download size, and — once
+   the app knows your hardware — whether it should run well, be tight, or not fit at all. Click
+   **Create container** to download and start it. Progress streams live.
+4. **Chat.** Once the model shows **Ready to chat**, head to the Chat page and start typing.
+   Responses stream in as the model generates them.
+
+Don't have a beefy machine? Small models like `llama3.2:1b` or `qwen2.5:0.5b` run comfortably on
+almost anything and are a good way to try things out.
+
+---
+
+## GPU support (optional, makes models noticeably faster)
 
 - **Windows** — [NVIDIA GPUs with WSL2](https://docs.docker.com/desktop/features/gpu/)
 - **Linux / macOS** — [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
 
----
-
-## Running locally (without Docker)
-
-### Backend
-
-```bash
-cd django_server
-
-# Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate        # macOS / Linux
-# venv\Scripts\activate         # Windows
-
-pip install -r requirements.txt
-```
-
-Copy and configure the environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` — the only values you must set for local development:
-
-```env
-SECRET_KEY="your-secret-key"        # generate at https://djecrety.ir/
-DEBUG="true"
-SERVER_URL="http://localhost:8000"
-DATABASE_USERNAME="admin"
-DATABASE_PASSWORD="password"
-DATABASE_NAME="chatbot"
-DATABASE_PORT="5432"
-LOCAL_DATABASE_HOST="localhost"
-```
-
-Run migrations and start the server:
-
-```bash
-python manage.py migrate
-python manage.py runserver
-```
-
-Backend is available at `http://localhost:8000`.
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend is available at `http://localhost:3000`.
+No GPU? Everything still works — models just generate more slowly on CPU.
 
 ---
 
-## Environment variables reference
+## Troubleshooting
 
-| Variable                  | Required | Default       | Description                                              |
-|---------------------------|----------|---------------|----------------------------------------------------------|
-| `SECRET_KEY`              | Yes      | —             | Django secret key. Generate at https://djecrety.ir/     |
-| `DEBUG`                   | No       | `false`       | Set to `true` for local development                      |
-| `SERVER_URL`              | No       | `http://localhost:8000` | Base URL of the backend (used during model scraping) |
-| `DATABASE_USERNAME`       | Yes      | —             | PostgreSQL username                                      |
-| `DATABASE_PASSWORD`       | Yes      | —             | PostgreSQL password                                      |
-| `DATABASE_NAME`           | Yes      | —             | PostgreSQL database name                                 |
-| `DATABASE_PORT`           | No       | `5432`        | PostgreSQL port                                          |
-| `LOCAL_DATABASE_HOST`     | No*      | —             | PostgreSQL hostname for local development                |
-| `DOCKER_DATABASE_HOST`    | No*      | —             | PostgreSQL hostname when running inside Docker           |
-| `PRODUCTION_DATABASE_HOST`| No       | —             | Managed PostgreSQL hostname for production               |
-| `IS_PRODUCTION`           | No       | `false`       | Set to `true` to use `PRODUCTION_DATABASE_HOST`          |
-| `ALLOWED_HOSTS`           | No       | `*`           | Comma-separated list of allowed host headers             |
-| `CORS_ALLOW_ALL_ORIGINS`  | No       | `true`        | Set to `false` and configure `CORS_ALLOWED_ORIGINS` for production |
+**"Docker is not running"** — Start Docker Desktop (or the Docker daemon) and click **Recheck** on
+the banner; it also rechecks automatically.
 
-*At least one of `LOCAL_DATABASE_HOST` or `DOCKER_DATABASE_HOST` is required depending on your setup.
+**A model won't pull or install** — a bad or unpullable tag fails visibly with the real error
+message instead of silently doing nothing. Check the message shown in the UI — it names the actual
+problem (network, disk space, or an invalid tag).
+
+**Refreshing the model list looks like it did nothing** — that's by design: refresh only adds and
+updates models, it never deletes your chat history or removes an installed model from the list.
+
+**Port already in use** — another process is bound to `3000`, `8000`, or `5432`. Stop it, or edit
+the port mappings in `docker-compose.yaml`.
+
+**Catalog refresh fails** (e.g. offline, or ollama.com unreachable) — your existing catalog is left
+untouched and the app stays fully usable, just without ollama.com's current listings until you
+retry.
+
+---
+
+## Running from source / configuration
+
+Prefer to run without Docker, or need to change ports/hosts/CORS? See [`django_server/.env.example`](django_server/.env.example)
+for every configuration option, and [`CLAUDE.md`](CLAUDE.md) for the full architecture and
+commands to run the backend (Django/Channels) and frontend (Nuxt) directly.
 
 ---
 

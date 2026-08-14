@@ -67,13 +67,18 @@ export function getContainerSocket(handlers: ContainerSocketHandlers): Container
 
   const url = new URL(baseURL)
   const socketHost = url.host
+  const scheme = url.protocol === 'https:'
+    ? 'wss'
+    : 'ws'
 
   let reconnectAttempts = 0
   let intentionallyClosed = false
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let currentSocket: WebSocket | null = null
 
   function buildSocket(): WebSocket {
-    const ws = new WebSocket(`ws://${socketHost}/ws/containers/`)
+    const ws = new WebSocket(`${scheme}://${socketHost}/ws/containers/`)
+    currentSocket = ws
 
     ws.addEventListener('open', () => {
       reconnectAttempts = 0
@@ -123,6 +128,8 @@ export function getContainerSocket(handlers: ContainerSocketHandlers): Container
       intentionallyClosed = true
       if (reconnectTimer)
         clearTimeout(reconnectTimer)
+      if (currentSocket && currentSocket.readyState !== WebSocket.CLOSED)
+        currentSocket.close()
     },
   }
 }

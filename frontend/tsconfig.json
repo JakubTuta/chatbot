@@ -10,7 +10,6 @@
     "moduleResolution": "bundler",
     "types": [
       "@types/node",
-      "@nuxt/types",
       "@pinia/nuxt",
     ],
     "resolveJsonModule": true,

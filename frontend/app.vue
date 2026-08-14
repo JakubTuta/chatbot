@@ -1,10 +1,3 @@
-<script setup lang="ts">
-import { useThemeToggle } from '~/composables/useTheme'
-
-const { initTheme } = useThemeToggle()
-initTheme()
-</script>
-
 <template>
   <NuxtLayout>
     <v-app>

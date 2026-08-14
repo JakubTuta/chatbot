@@ -17,19 +17,22 @@ const isOpen = defineModel<boolean>({ default: false, required: true })
 <template>
   <v-dialog
     v-model="isOpen"
-    max-width="400"
+    max-width="440"
     persistent
+    transition="dialog-rise-transition"
   >
-    <v-card>
-      <v-card-title class="text-h6">
-        {{ props.title }}
-      </v-card-title>
+    <v-card class="reichat-dialog">
+      <div class="reichat-dialog-header">
+        <span class="reichat-dialog-title">{{ props.title }}</span>
+      </div>
 
-      <v-card-text>
+      <v-card-text class="reichat-dialog-body">
         {{ props.message }}
       </v-card-text>
 
-      <v-card-actions class="justify-end">
+      <v-card-actions class="reichat-dialog-actions">
+        <v-spacer />
+
         <v-btn
           variant="text"
           @click="emit('cancel')"
@@ -38,7 +41,7 @@ const isOpen = defineModel<boolean>({ default: false, required: true })
         </v-btn>
 
         <v-btn
-          :color="props.confirmColor || 'error'"
+          :color="props.confirmColor || 'red'"
           variant="flat"
           @click="emit('confirm')"
         >
