@@ -77,7 +77,6 @@ onUnmounted(() => {
   containerStore.stopPolling()
 })
 
-// When scrape finishes, refresh model list
 watch(
   () => scrapeProgress.value.running,
   (running, wasRunning) => {
@@ -87,8 +86,6 @@ watch(
     }
   },
 )
-
-// ─── Computed: filtered + sorted model list ───────────────────────────────────
 
 const preparedAIModels = computed(() => {
   const searchFn = (model: IAIModel) => !search.value || model.name.toLowerCase().includes(search.value.toLowerCase())
@@ -172,8 +169,6 @@ function cycleSort() {
   addSortToQuery(next.value)
 }
 
-// ─── Container helpers ────────────────────────────────────────────────────────
-
 function getContainerName(model: IAIModel): string | null {
   if (!selectedVersions.value[model.model])
     return null
@@ -240,8 +235,6 @@ watch([aiModels, containers], () => {
   }
 }, { immediate: true, deep: true })
 
-// ─── Status display ────────────────────────────────────────────────────────────
-
 const STATUS_META: Record<string, { dot: string, label: string }> = {
   running: { dot: 'mint', label: 'ready to chat' },
   exited: { dot: 'grey-dot', label: 'container stopped' },
@@ -254,8 +247,6 @@ const STATUS_META: Record<string, { dot: string, label: string }> = {
 function statusMeta(status: string) {
   return STATUS_META[status] ?? STATUS_META.not_found
 }
-
-// ─── Hardware fit ───────────────────────────────────────────────────────────
 
 const FIT_LABEL: Record<FitLabel, string> = {
   runs_well: 'runs well',
@@ -271,8 +262,6 @@ function fitFor(model: IAIModel) {
 
   return computeFitLabel(version.size_bytes, hardware.value)
 }
-
-// ─── Primary action logic ──────────────────────────────────────────────────────
 
 interface ActionConfig {
   label: string
@@ -342,8 +331,6 @@ function canRemove(model: IAIModel): boolean {
   return ['running', 'exited', 'paused', 'restarting', 'pulling_model'].includes(s)
 }
 
-// ─── Actions ──────────────────────────────────────────────────────────────────
-
 function createContainer(model: IAIModel) {
   if (!selectedVersions.value[model.model])
     return
@@ -406,8 +393,6 @@ function cancelRemoveContainer() {
   confirmRemoveDialog.value = false
   modelToRemove.value = null
 }
-
-// ─── CLI commands ─────────────────────────────────────────────────────────────
 
 // The backend allocates ports from a collision-free table, not a formula —
 // `11434 + model.index` (the old scheme) stopped meaning anything once that
@@ -499,8 +484,6 @@ function copyToClipboard(text: string): void {
   navigator.clipboard.writeText(text)
 }
 
-// ─── Formatting helpers ───────────────────────────────────────────────────────
-
 function formatNumber(num: number): string {
   if (num >= 1_000_000)
     return `${(num / 1_000_000).toFixed(1)}M`
@@ -509,8 +492,6 @@ function formatNumber(num: number): string {
 
   return num.toString()
 }
-
-// ─── Query param sync ─────────────────────────────────────────────────────────
 
 // `push`ing per keystroke used to add one history entry per character
 // typed — Back needed as many presses as the search term was long.
@@ -568,7 +549,6 @@ const catalogueButtonLabel = computed(() => {
   <div class="models-page">
     <SystemStatusBanner />
 
-    <!-- ── Header ── -->
     <div class="models-header">
       <div>
         <h1 class="page-h1">
@@ -595,7 +575,6 @@ const catalogueButtonLabel = computed(() => {
       </v-btn>
     </div>
 
-    <!-- ── Filters ── -->
     <div class="filter-row">
       <div class="search-field">
         <v-icon size="16">
@@ -642,7 +621,6 @@ const catalogueButtonLabel = computed(() => {
       </button>
     </div>
 
-    <!-- ── Empty state ── -->
     <div
       v-if="!loading && !aiModels.length"
       class="page-empty"
@@ -682,7 +660,6 @@ const catalogueButtonLabel = computed(() => {
       </div>
     </div>
 
-    <!-- ── Model cards ── -->
     <div class="models-grid">
       <div
         v-for="model in preparedAIModels"

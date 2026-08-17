@@ -265,7 +265,6 @@ const hasBranches = computed(() => (props.message.sibling_count ?? 0) > 1)
 </template>
 
 <style scoped>
-/* ── Assistant: no bubble ──────────────────────────────── */
 .assistant-message {
   width: 100%;
 }
@@ -354,7 +353,6 @@ const hasBranches = computed(() => (props.message.sibling_count ?? 0) > 1)
   cursor: not-allowed;
 }
 
-/* ── User: bubble, right-aligned ───────────────────────── */
 .user-message {
   display: flex;
   flex-direction: column;

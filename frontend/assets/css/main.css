@@ -1,4 +1,3 @@
-/* ── Design tokens (redesign/README.md) ─────────────────── */
 :root {
   --color-paper: oklch(0.963 0.013 168);
   --color-card: oklch(0.995 0.004 168);
@@ -55,8 +54,7 @@ body,
   color: var(--color-ink-3);
 }
 
-/* ── Motion ───────────────────────────────────────────────
-   Small and mechanical — motion reports machine state, nothing
+/* Small and mechanical — motion reports machine state, nothing
    here is decorative. */
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -125,8 +123,8 @@ html {
   scroll-behavior: smooth;
 }
 
-/* ── Shared dialog shell (redesign/README.md "Dialogs") ─────
-   Reused by ConfirmDialog and every v-dialog-based dialog
+/* Shared dialog shell (redesign/README.md "Dialogs") —
+   reused by ConfirmDialog and every v-dialog-based dialog
    component — a v-card gets `class="reichat-dialog"`, with a
    sticky `.reichat-dialog-header` / scrolling body /
    `.reichat-dialog-actions` footer inside it. */
@@ -211,7 +209,6 @@ html {
   opacity: 0;
 }
 
-/* ── Amber banner (Docker/backend status, chat contextual alerts) ── */
 .status-banner {
   display: flex;
   align-items: center;

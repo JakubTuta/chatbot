@@ -50,17 +50,7 @@ git clone https://github.com/JakubTuta/chatbot.git
 cd chatbot
 ```
 
-### 2. Create the backend environment file
-
-```bash
-cp django_server/.env.example django_server/.env
-```
-
-The bundled defaults work out of the box. If you plan to keep this running long-term, open the new
-`.env` file and replace `SECRET_KEY` with your own (generate one at
-[djecrety.ir](https://djecrety.ir/)) — the example file ships with a public, checked-in key.
-
-### 3. Start the app
+### 2. Start the app
 
 ```bash
 docker-compose up -d
@@ -115,14 +105,6 @@ the port mappings in `docker-compose.yaml`.
 **Catalog refresh fails** (e.g. offline, or ollama.com unreachable) — your existing catalog is left
 untouched and the app stays fully usable, just without ollama.com's current listings until you
 retry.
-
----
-
-## Running from source / configuration
-
-Prefer to run without Docker, or need to change ports/hosts/CORS? See [`django_server/.env.example`](django_server/.env.example)
-for every configuration option, and [`CLAUDE.md`](CLAUDE.md) for the full architecture and
-commands to run the backend (Django/Channels) and frontend (Nuxt) directly.
 
 ---
 

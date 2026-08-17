@@ -497,7 +497,6 @@ watch(waitingForResponse, (newValue) => {
       >{{ currentChatTitle }}</span>
     </div>
 
-    <!-- Messages area wrapper -->
     <div class="messages-area">
       <div
         ref="messagesContainer"
@@ -516,7 +515,6 @@ watch(waitingForResponse, (newValue) => {
           @use-suggestion="useSuggestion"
         />
 
-        <!-- Messages list with enter transitions -->
         <TransitionGroup
           name="msg"
           tag="div"
@@ -555,7 +553,6 @@ watch(waitingForResponse, (newValue) => {
         <div ref="scrollToMe" />
       </div>
 
-      <!-- Scroll-to-bottom shortcut -->
       <Transition name="fade">
         <button
           v-if="showScrollFab"
@@ -672,7 +669,6 @@ watch(waitingForResponse, (newValue) => {
   min-height: 0;
 }
 
-/* ── Thread header ──────────────────────────────────────── */
 .thread-header {
   display: flex;
   align-items: center;
@@ -705,7 +701,6 @@ watch(waitingForResponse, (newValue) => {
   color: oklch(0.42 0.016 168);
 }
 
-/* ── Messages area ─────────────────────────────────────── */
 .messages-area {
   position: relative;
   flex: 1;
@@ -729,7 +724,6 @@ watch(waitingForResponse, (newValue) => {
   width: 100%;
 }
 
-/* ── Scroll shortcut ───────────────────────────────────── */
 .scroll-fab {
   position: absolute;
   bottom: 196px;
@@ -748,7 +742,6 @@ watch(waitingForResponse, (newValue) => {
   box-shadow: var(--shadow-popover);
 }
 
-/* ── Composer dock ─────────────────────────────────────── */
 .composer-dock {
   position: absolute;
   left: 0;
@@ -773,7 +766,6 @@ watch(waitingForResponse, (newValue) => {
   margin-bottom: 8px;
 }
 
-/* ── TransitionGroup: message entrance ─────────────────── */
 .msg-enter-active {
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
@@ -788,7 +780,6 @@ watch(waitingForResponse, (newValue) => {
   transform: translateY(0);
 }
 
-/* ── Fade (scroll shortcut show/hide) ──────────────────── */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
@@ -799,7 +790,6 @@ watch(waitingForResponse, (newValue) => {
   opacity: 0;
 }
 
-/* ── Reduced motion ────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .msg-enter-active {
     transition: opacity 0.15s ease;
@@ -810,7 +800,6 @@ watch(waitingForResponse, (newValue) => {
   }
 }
 
-/* ── Mobile ────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .composer-dock {
     padding: 0 12px 14px;

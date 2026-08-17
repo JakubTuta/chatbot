@@ -1,12 +1,7 @@
 services:
   postgres:
-    # pgvector's image, not plain postgres:16-alpine — same Postgres 16,
-    # but with the `vector` extension files present so migration 0010's
-    # VectorExtension() can actually CREATE EXTENSION vector.
     image: pgvector/pgvector:pg16
     ports:
-      # Loopback-only — this was published on 0.0.0.0 with a hardcoded
-      # admin/password, reachable from anyone on the same network.
       - 127.0.0.1:5432:5432
     networks:
       - default
@@ -25,6 +20,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      # Loopback-only, like postgres. Published so that running the backend
+      # from source (outside compose) can still reach the channel layer.
+      - 127.0.0.1:6379:6379
     networks:
       - default
     healthcheck:
@@ -42,11 +41,6 @@ services:
       - 127.0.0.1:8000:8000
     networks:
       - default
-    env_file:
-      - django_server/.env
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

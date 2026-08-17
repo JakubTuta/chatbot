@@ -21,7 +21,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
     <div class="home-inner">
       <SystemStatusBanner style="margin-top: 16px" />
 
-      <!-- ── Hero ── -->
       <section class="hero">
         <div class="hero-copy">
           <div class="mono-kicker hero-kicker">
@@ -132,7 +131,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
         </div>
       </section>
 
-      <!-- ── How the pieces fit ── -->
       <section class="pieces">
         <div class="piece-box">
           Docker
@@ -151,7 +149,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
         </div>
       </section>
 
-      <!-- ── Explainer panels ── -->
       <section class="explainer-grid">
         <div class="panel">
           <div class="mono-kicker panel-kicker">
@@ -206,7 +203,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
         </div>
       </section>
 
-      <!-- ── Get started in three steps ── -->
       <section class="steps-section">
         <h2 class="section-title">
           Get started in three steps
@@ -273,7 +269,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
         </div>
       </section>
 
-      <!-- ── Closing CTA ── -->
       <section class="cta-block">
         <h2 class="cta-headline">
           Ready to start chatting?
@@ -318,7 +313,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   padding: 0 20px 60px;
 }
 
-/* ── Hero ── */
 .hero {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
@@ -466,7 +460,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   padding-top: 12px;
 }
 
-/* ── Pieces strip ── */
 .pieces {
   display: flex;
   align-items: center;
@@ -496,7 +489,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   font-size: 13px;
 }
 
-/* ── Explainer panels ── */
 .explainer-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -532,7 +524,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   color: var(--color-mint-deep);
 }
 
-/* ── Steps ── */
 .section-title {
   font-size: 24px;
   font-weight: 400;
@@ -601,7 +592,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   text-decoration: underline;
 }
 
-/* ── CTA ── */
 .cta-block {
   background: var(--color-mint-tint);
   border-radius: 20px;
@@ -630,7 +620,6 @@ function formatBytesOrUnknown(bytes: number | null): string {
   flex-wrap: wrap;
 }
 
-/* ── Responsive ── */
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;

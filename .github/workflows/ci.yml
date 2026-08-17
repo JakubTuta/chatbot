@@ -22,12 +22,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
-    env:
-      LOCAL_DATABASE_HOST: localhost
-      DATABASE_USERNAME: admin
-      DATABASE_PASSWORD: password
-      DATABASE_NAME: chatbot
-      DATABASE_PORT: 5432
     steps:
       - uses: actions/checkout@v4
 
@@ -95,9 +89,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Bring up the stack
-        run: |
-          cp django_server/.env.example django_server/.env
-          docker compose up -d --build
+        run: docker compose up -d --build
 
       - name: Wait for backend and frontend to be reachable
         run: |

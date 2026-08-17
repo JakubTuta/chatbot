@@ -405,7 +405,6 @@ function handleSearchSelect(chatId: string) {
 </template>
 
 <style scoped>
-/* Drawer */
 .chat-drawer {
   background: var(--color-soft) !important;
   border-color: var(--color-line-2) !important;
@@ -531,7 +530,6 @@ function handleSearchSelect(chatId: string) {
   flex-shrink: 0;
 }
 
-/* Chat page layout */
 .chat-page-content {
   display: flex;
   flex-direction: column;

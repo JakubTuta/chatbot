@@ -44,6 +44,13 @@ Django 5 + DRF → Channels/Daphne (ASGI) → Ollama containers spawned via the 
 - A backend dependency pin that "already works" in a stale local venv can still fail a clean
   `pip install -r requirements.txt` in the Docker image — always verify new/changed pins against a
   fresh `docker compose build`, not just the local environment.
+- Comments carry WHY only, never WHAT. No decorative section dividers (`/* ── Label ── */`,
+  `// ─── Label ───`, `<!-- ── Label ── -->`) above a self-evidently-named class/function/block. No
+  comment that just repeats info already stated elsewhere (e.g. `# url: /foo/` on a view whose
+  route is already spelled out in `urls.py`). No framework-boilerplate docstrings/comments
+  (django-admin's generated "ASGI config for ..." headers, links to generic Django docs). A real WHY
+  comment (bug history, race condition, protocol quirk, platform gotcha) stays — most existing
+  comments in this repo are this kind and are correct as-is.
 
 ## Commands
 

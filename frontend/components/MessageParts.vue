@@ -90,7 +90,6 @@ const { copiedKey, copy } = useCopyFeedback()
   color: var(--color-ink);
 }
 
-/* ── Markdown ──────────────────────────────────────────── */
 .markdown-body :deep(p) {
   margin: 0.3em 0;
 }

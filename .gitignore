@@ -30,7 +30,6 @@ venv
 # trash
 test.*
 *.http
-.env
 .vscode
 .claude/
 

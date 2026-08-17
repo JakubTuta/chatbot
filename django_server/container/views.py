@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 class Docker(APIView):
     def get(self, request) -> Response:
-        # url: /docker/
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -33,8 +31,6 @@ class Docker(APIView):
 
 class Containers(APIView):
     def get(self, request) -> Response:
-        # url: /docker/containers/
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -50,8 +46,6 @@ class Containers(APIView):
 
 class Hardware(APIView):
     def get(self, request) -> Response:
-        # url: /docker/hardware/
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -71,11 +65,9 @@ class Hardware(APIView):
 
 class DiskUsage(APIView):
     def get(self, request) -> Response:
-        # url: /docker/disk-usage/
         # Real installed-model disk usage, not the registry's advertised
         # size — matched against the catalog by (model, parameters) since
         # Docker itself doesn't know which Ollama model a container holds.
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -112,8 +104,6 @@ class DiskUsage(APIView):
 
 class OllamaImage(APIView):
     def get(self, request) -> Response:
-        # url: /docker/ollama-image/
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -128,8 +118,6 @@ class OllamaImage(APIView):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request) -> Response:
-        # url: /docker/ollama-image/
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -148,8 +136,6 @@ class OllamaImage(APIView):
 
 class Container(APIView):
     def get(self, request, model) -> Response:
-        # url: /docker/container/{model}
-
         docker_client = ContainerManager()
 
         if not docker_client.is_connected() and not docker_client.connect_to_docker():
@@ -172,10 +158,8 @@ class Container(APIView):
         )
 
     def post(self, request, model) -> Response:
-        # url: /docker/container/{model}?parameters={parameters}
         # Returns 200 synchronously when starting an existing container.
         # Returns 202 and starts a background worker when creating a new container.
-
         query_model_params = request.query_params.get("parameters", None)
         if query_model_params is None:
             return Response(
@@ -350,8 +334,6 @@ class Container(APIView):
         )
 
     def delete(self, request, model) -> Response:
-        # url: /docker/container/{model}?parameters={parameters}&method={method}
-
         docker_client = ContainerManager()
 
         query_model_params = request.query_params.get("parameters", None)

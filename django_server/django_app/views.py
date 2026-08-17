@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 class AIModels(APIView):
-    # url: /ai-models/
-
     def get(self, request: Request) -> Response:
         all_models = models.AIModel.objects.prefetch_related("versions").order_by("-popularity")
         deserialized_models = serializers.AIModelSerializer(all_models, many=True).data
@@ -108,8 +106,6 @@ class AIModels(APIView):
 
 
 class Personas(APIView):
-    # url: /personas/
-
     def get(self, request: Request) -> Response:
         all_personas = models.Persona.objects.order_by("name")
         serialized = serializers.PersonaSerializer(all_personas, many=True).data
@@ -165,8 +161,6 @@ class Personas(APIView):
 
 
 class PromptTemplates(APIView):
-    # url: /prompt-templates/
-
     def get(self, request: Request) -> Response:
         templates = models.PromptTemplate.objects.order_by("name")
         serialized = serializers.PromptTemplateSerializer(templates, many=True).data
@@ -220,8 +214,6 @@ class PromptTemplates(APIView):
 
 
 class Collections(APIView):
-    # url: /collections/
-
     def get(self, request: Request) -> Response:
         collections = (
             models.DocumentCollection.objects.select_related("embedding_model")
@@ -279,8 +271,6 @@ class Collections(APIView):
 
 
 class Documents(APIView):
-    # url: /documents/
-
     @decorators.required_query_params(["collection_id"])
     def get(self, request: Request) -> Response:
         documents = models.Document.objects.filter(
@@ -346,8 +336,6 @@ class Documents(APIView):
 
 
 class MCPServers(APIView):
-    # url: /mcp-servers/
-
     def get(self, request: Request) -> Response:
         servers = models.MCPServer.objects.order_by("name")
         serialized = serializers.MCPServerSerializer(servers, many=True).data
@@ -432,8 +420,6 @@ class MCPServers(APIView):
 
 
 class Search(APIView):
-    # url: /search/{model}
-
     def get(self, request: Request, model: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response({"error": "AI model not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -445,8 +431,6 @@ class Search(APIView):
 
 
 class ChatHistory(APIView):
-    # url: /chat-history/{model}
-
     def get(self, request: Request, model: str, chat_id: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
@@ -504,8 +488,6 @@ class ChatHistory(APIView):
 
 
 class AllChats(APIView):
-    # url: /all-chats/{model}
-
     def get(self, request: Request, model: str) -> Response:
         if (ai_model := models.AIModel.objects.filter(model=model).first()) is None:
             return Response(
