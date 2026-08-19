@@ -5,6 +5,13 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'ReiChat',
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/icon-16.png' },
+        { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/icon-32.png' },
+        { rel: 'icon', type: 'image/png', sizes: '48x48', href: '/icon-48.png' },
+        { rel: 'apple-touch-icon', sizes: '256x256', href: '/icon-256.png' },
+      ],
     },
   },
 

@@ -8,13 +8,6 @@ docker==7.2.0
 beautifulsoup4==4.15.0
 channels==4.3.2
 channels_redis==4.3.0
-# channels_redis's blocking BRPOP relies on redis-py behavior where a
-# blocking command's timeout can exceed the client's socket_timeout and
-# return nil rather than raising. redis-py 5+ enforces the opposite
-# (blocking `timeout` cannot exceed `socket_timeout` — see
-# redis/redis-py#2807), so leaving `redis` unpinned lets pip pull 8.x and
-# every idle BRPOP cycle raises TimeoutError, killing the ASGI consumer and
-# force-closing every open chat WebSocket every few seconds.
 redis==4.6.0
 daphne==4.2.3
 langchain-core==1.5.3

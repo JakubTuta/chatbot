@@ -7,14 +7,13 @@ import httpx
 import ollama
 import pydantic
 from asgiref.sync import sync_to_async
+from container.ContainerManager import ContainerManager
 from django.db import transaction
 from django.db.models.manager import BaseManager
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import ToolMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
-
-from container.ContainerManager import ContainerManager
 
 from . import models
 from .mcp_integration import client as mcp_client
@@ -47,6 +46,20 @@ def _chat_ollama_kwargs(params: GenerationParams | None) -> dict[str, typing.Any
     return {k: v for k, v in params.items() if v is not None}
 
 
+_OLLAMA_HTTPX_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=15.0, pool=15.0)
+
+
+def _build_chat_ollama(
+    base_url: str, full_model_string: str, **kwargs: typing.Any
+) -> ChatOllama:
+    return ChatOllama(
+        model=full_model_string,
+        base_url=base_url,
+        client_kwargs={"timeout": _OLLAMA_HTTPX_TIMEOUT},
+        **kwargs,
+    )
+
+
 class GenerationStats(typing.TypedDict, total=False):
     prompt_tokens: int
     completion_tokens: int
@@ -58,7 +71,9 @@ class GenerationStats(typing.TypedDict, total=False):
     context_limit: int
 
 
-def _record_generation_stats(stats: GenerationStats | None, response_metadata: dict) -> None:
+def _record_generation_stats(
+    stats: GenerationStats | None, response_metadata: dict
+) -> None:
     # Only Ollama's final streamed chunk (done=True) carries these — every
     # other chunk's response_metadata is empty/partial, hence the .get()s
     # rather than assuming they're always present.
@@ -101,13 +116,17 @@ async def astream_bot_response(
 
     base_url, full_model_string = url_info
 
-    new_message = _map_history([{"role": "user", "content": message, "image": image}])[0]
+    new_message = _map_history([{"role": "user", "content": message, "image": image}])[
+        0
+    ]
     messages = _map_history(history) + [new_message]
 
     if system_prompt:
         messages = [{"role": "system", "content": system_prompt}, *messages]
 
-    llm = ChatOllama(model=full_model_string, base_url=base_url, **_chat_ollama_kwargs(generation_params))
+    llm = _build_chat_ollama(
+        base_url, full_model_string, **_chat_ollama_kwargs(generation_params)
+    )
 
     # `stats` is a mutable out-param rather than a return value: an async
     # generator consumed with `async for` (as the caller does) has no way to
@@ -169,7 +188,9 @@ async def astream_tool_response(
 
     base_url, full_model_string = url_info
 
-    new_message = _map_history([{"role": "user", "content": message, "image": image}])[0]
+    new_message = _map_history([{"role": "user", "content": message, "image": image}])[
+        0
+    ]
     lc_messages: list = _map_history(history) + [new_message]
 
     if system_prompt:
@@ -183,12 +204,18 @@ async def astream_tool_response(
     tool_specs: list[typing.Any] = list(BUILTIN_TOOLS)
 
     if mcp_servers:
-        tool_lists = await asyncio.gather(*(mcp_client.list_server_tools(s) for s in mcp_servers))
-        registry = mcp_client.build_tool_registry(list(zip(mcp_servers, tool_lists, strict=True)))
+        tool_lists = await asyncio.gather(
+            *(mcp_client.list_server_tools(s) for s in mcp_servers)
+        )
+        registry = mcp_client.build_tool_registry(
+            list(zip(mcp_servers, tool_lists, strict=True))
+        )
         tool_specs += registry.tool_specs
         mcp_lookup = registry.lookup
 
-    llm = ChatOllama(model=full_model_string, base_url=base_url, **_chat_ollama_kwargs(generation_params))
+    llm = _build_chat_ollama(
+        base_url, full_model_string, **_chat_ollama_kwargs(generation_params)
+    )
     llm_with_tools = llm.bind_tools(tool_specs)
 
     try:
@@ -205,11 +232,21 @@ async def astream_tool_response(
             lc_messages.append(response)
 
             for tool_call in response.tool_calls:
-                result = await _run_tool_call(tool_call["name"], tool_call["args"], mcp_lookup)
+                result = await _run_tool_call(
+                    tool_call["name"], tool_call["args"], mcp_lookup
+                )
 
-                yield {"name": tool_call["name"], "args": tool_call["args"], "result": result}
+                yield {
+                    "name": tool_call["name"],
+                    "args": tool_call["args"],
+                    "result": result,
+                }
                 lc_messages.append(
-                    ToolMessage(content=result, tool_call_id=tool_call["id"], name=tool_call["name"])
+                    ToolMessage(
+                        content=result,
+                        tool_call_id=tool_call["id"],
+                        name=tool_call["name"],
+                    )
                 )
     except httpx.HTTPError as e:
         raise ModelUnavailableError(
@@ -225,17 +262,26 @@ async def astream_tool_response(
 
 
 async def _run_tool_call(
-    name: str, args: dict[str, typing.Any], mcp_lookup: dict[str, tuple[models.MCPServer, str]]
+    name: str,
+    args: dict[str, typing.Any],
+    mcp_lookup: dict[str, tuple[models.MCPServer, str]],
 ) -> str:
     if name in BUILTIN_TOOLS_BY_NAME:
-        return await sync_to_async(BUILTIN_TOOLS_BY_NAME[name].invoke, thread_sensitive=False)(args)
+        return await sync_to_async(
+            BUILTIN_TOOLS_BY_NAME[name].invoke, thread_sensitive=False
+        )(args)
 
     if name in mcp_lookup:
         server, original_name = mcp_lookup[name]
         try:
             return await mcp_client.call_server_tool(server, original_name, args)
         except Exception as e:
-            logger.warning("MCP tool call failed for %s on server %r: %s", original_name, server.name, e)
+            logger.warning(
+                "MCP tool call failed for %s on server %r: %s",
+                original_name,
+                server.name,
+                e,
+            )
             return f"Error: MCP tool call failed: {e}"
 
     return f"Error: unknown tool {name!r}"
@@ -247,9 +293,7 @@ async def astream_structured_bot_response(
     message: str,
     image: str,
     history: list[dict[str, str]],
-    structured_output: list[
-        dict[str, str | str | None]
-    ],
+    structured_output: list[dict[str, str | str | None]],
     system_prompt: str | None = None,
     generation_params: GenerationParams | None = None,
     stats: GenerationStats | None = None,
@@ -278,14 +322,23 @@ Your response should be valid JSON only, with no other text or explanation."""
     # Ollama models reliably attend to only one system message, so a
     # persona's instructions and the schema instructions are combined into
     # one rather than sent as two separate system messages.
-    system_message = f"{system_prompt}\n\n{schema_instructions}" if system_prompt else schema_instructions
+    system_message = (
+        f"{system_prompt}\n\n{schema_instructions}"
+        if system_prompt
+        else schema_instructions
+    )
 
-    new_message = _map_history([{"role": "user", "content": message, "image": image}])[0]
+    new_message = _map_history([{"role": "user", "content": message, "image": image}])[
+        0
+    ]
     system_msg = {"role": "system", "content": system_message}
     messages = _map_history(history) + [system_msg, new_message]
 
-    llm = ChatOllama(
-        model=full_model_string, base_url=base_url, format="json", **_chat_ollama_kwargs(generation_params)
+    llm = _build_chat_ollama(
+        base_url,
+        full_model_string,
+        format="json",
+        **_chat_ollama_kwargs(generation_params),
     )
 
     try:
@@ -318,7 +371,9 @@ Your response should be valid JSON only, with no other text or explanation."""
     return f"```json\n{json_string}\n```"
 
 
-def _map_history(history: list[dict[str, str]]) -> list[dict[str, str | list[dict[str, str]]]]:
+def _map_history(
+    history: list[dict[str, str]],
+) -> list[dict[str, str | list[dict[str, str]]]]:
     """Build LangChain-style message dicts. Images must be structured content
     parts (`[{"type": "image_url", "image_url": "data:..."}]`) — ChatOllama
     only reads images from there. A top-level "images" key (the old shape)
@@ -444,7 +499,9 @@ def search_messages(ai_model: models.AIModel, query: str) -> list[dict[str, str]
         return []
 
     matches = (
-        models.ChatMessage.objects.filter(chat__ai_model=ai_model, content__icontains=query)
+        models.ChatMessage.objects.filter(
+            chat__ai_model=ai_model, content__icontains=query
+        )
         .select_related("chat")
         .order_by("-created_at")[:SEARCH_RESULT_LIMIT]
     )
@@ -526,9 +583,9 @@ def get_branch_siblings(message: models.ChatMessage) -> list[models.ChatMessage]
     """All messages competing for the same slot as `message` — same parent,
     same chat — oldest first. What a branch switcher cycles through."""
     return list(
-        models.ChatMessage.objects.filter(chat=message.chat_id, parent=message.parent_id).order_by(
-            "created_at", "id"
-        )
+        models.ChatMessage.objects.filter(
+            chat=message.chat_id, parent=message.parent_id
+        ).order_by("created_at", "id")
     )
 
 
@@ -545,7 +602,9 @@ def get_branch_leaf(message: models.ChatMessage) -> models.ChatMessage:
     return node
 
 
-def serialize_messages_for_display(messages: list[models.ChatMessage]) -> list[dict[str, str | int]]:
+def serialize_messages_for_display(
+    messages: list[models.ChatMessage],
+) -> list[dict[str, str | int]]:
     """Like deserialize_messages, but for the REST/WS payloads the frontend
     renders from — adds branch position so a message with siblings can show
     a "◀ 2/3 ▶" switcher. Not used for LLM history, which has no use for it.
@@ -576,10 +635,17 @@ def add_messages_to_history(
     with transaction.atomic():
         parent = chat_history.active_leaf
         user_message = models.ChatMessage.objects.create(
-            chat=chat_history, parent=parent, role="user", content=user_content, image=image
+            chat=chat_history,
+            parent=parent,
+            role="user",
+            content=user_content,
+            image=image,
         )
         assistant_message = models.ChatMessage.objects.create(
-            chat=chat_history, parent=user_message, role="assistant", content=assistant_content
+            chat=chat_history,
+            parent=user_message,
+            role="assistant",
+            content=assistant_content,
         )
         chat_history.active_leaf = assistant_message
         chat_history.save(update_fields=["active_leaf", "last_update_time"])
@@ -597,7 +663,10 @@ def commit_new_assistant_branch(
     """
     with transaction.atomic():
         new_assistant = models.ChatMessage.objects.create(
-            chat=chat_history, parent=parent_user_message, role="assistant", content=assistant_content
+            chat=chat_history,
+            parent=parent_user_message,
+            role="assistant",
+            content=assistant_content,
         )
         chat_history.active_leaf = new_assistant
         chat_history.save(update_fields=["active_leaf", "last_update_time"])
@@ -617,10 +686,17 @@ def commit_new_exchange_branch(
     """
     with transaction.atomic():
         new_user = models.ChatMessage.objects.create(
-            chat=chat_history, parent=parent_message, role="user", content=user_content, image=image
+            chat=chat_history,
+            parent=parent_message,
+            role="user",
+            content=user_content,
+            image=image,
         )
         new_assistant = models.ChatMessage.objects.create(
-            chat=chat_history, parent=new_user, role="assistant", content=assistant_content
+            chat=chat_history,
+            parent=new_user,
+            role="assistant",
+            content=assistant_content,
         )
         chat_history.active_leaf = new_assistant
         chat_history.save(update_fields=["active_leaf", "last_update_time"])
@@ -666,7 +742,12 @@ def prepare_regenerate(
     last_user = path[-2]
     history = deserialize_messages(path[:-2])
 
-    return last_user, str(last_user.content), str(last_user.image) if last_user.image else "", history
+    return (
+        last_user,
+        str(last_user.content),
+        str(last_user.image) if last_user.image else "",
+        history,
+    )
 
 
 def switch_branch(

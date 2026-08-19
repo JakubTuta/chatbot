@@ -27,7 +27,13 @@ function isActive(to: string) {
       to="/"
       class="app-logo-link"
     >
-      <span class="app-logo-mark">R</span>
+      <img
+        src="/icon-64.png"
+        alt="ReiChat"
+        class="app-logo-mark"
+        width="30"
+        height="30"
+      >
 
       <span class="app-wordmark">ReiChat</span>
     </NuxtLink>
@@ -69,15 +75,9 @@ function isActive(to: string) {
 .app-logo-mark {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
-  background: var(--color-mint-btn);
-  color: var(--color-mint-ink);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
 }
 
 .app-wordmark {
