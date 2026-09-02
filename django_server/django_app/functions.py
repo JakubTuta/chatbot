@@ -7,13 +7,14 @@ import httpx
 import ollama
 import pydantic
 from asgiref.sync import sync_to_async
-from container.ContainerManager import ContainerManager
 from django.db import transaction
 from django.db.models.manager import BaseManager
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import ToolMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
+
+from container.ContainerManager import ContainerManager
 
 from . import models
 from .mcp_integration import client as mcp_client

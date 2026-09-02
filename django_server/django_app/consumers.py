@@ -112,7 +112,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if structured_output is not None:
                 self._validate_structured_output(structured_output)
 
-            ai_model = await database_sync_to_async(functions.get_ai_model)(ai_model_value)
+            ai_model = await database_sync_to_async(functions.get_ai_model)(
+                ai_model_value
+            )
             chat_history = await database_sync_to_async(functions.get_chat_history)(
                 ai_model, self.room_name
             )
@@ -120,7 +122,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if ai_model is None or chat_history is None:
                 raise ValueError("Invalid model or chat history.")
 
-            history_messages = await database_sync_to_async(self._load_history)(chat_history)
+            history_messages = await database_sync_to_async(self._load_history)(
+                chat_history
+            )
         except ValueError as e:
             logger.warning("Validation error in WebSocket receive: %s", e)
             await self._send_error(str(e))
@@ -155,7 +159,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if structured_output is not None:
                 self._validate_structured_output(structured_output)
 
-            ai_model = await database_sync_to_async(functions.get_ai_model)(ai_model_value)
+            ai_model = await database_sync_to_async(functions.get_ai_model)(
+                ai_model_value
+            )
             chat_history = await database_sync_to_async(functions.get_chat_history)(
                 ai_model, self.room_name
             )
@@ -163,7 +169,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if ai_model is None or chat_history is None:
                 raise ValueError("Invalid model or chat history.")
 
-            regenerate_data = await database_sync_to_async(functions.prepare_regenerate)(chat_history)
+            regenerate_data = await database_sync_to_async(
+                functions.prepare_regenerate
+            )(chat_history)
             if regenerate_data is None:
                 raise ValueError("Nothing to regenerate yet — send a message first.")
 
@@ -220,7 +228,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if structured_output is not None:
                 self._validate_structured_output(structured_output)
 
-            ai_model = await database_sync_to_async(functions.get_ai_model)(ai_model_value)
+            ai_model = await database_sync_to_async(functions.get_ai_model)(
+                ai_model_value
+            )
             chat_history = await database_sync_to_async(functions.get_chat_history)(
                 ai_model, self.room_name
             )
@@ -228,9 +238,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if ai_model is None or chat_history is None:
                 raise ValueError("Invalid model or chat history.")
 
-            edit_data = await database_sync_to_async(functions.prepare_edit_resend)(chat_history, index)
+            edit_data = await database_sync_to_async(functions.prepare_edit_resend)(
+                chat_history, index
+            )
             if edit_data is None:
-                raise ValueError("That message can no longer be edited — the conversation may have changed.")
+                raise ValueError(
+                    "That message can no longer be edited — the conversation may have changed."
+                )
 
             edit_resend_parent, history_messages = edit_data
         except ValueError as e:
@@ -267,7 +281,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
     ) -> None:
         full_response = ""
         stats: functions.GenerationStats = {}
-        persona_prompt = await database_sync_to_async(functions.get_persona_system_prompt)(chat_history)
+        persona_prompt = await database_sync_to_async(
+            functions.get_persona_system_prompt
+        )(chat_history)
         # Fetching active collections and running the pgvector search are
         # both blocking (DB + Docker SDK + an HTTP call to the embedding
         # model), same as get_ollama_url — run off the event loop so one
@@ -275,7 +291,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         rag_context, citations = await sync_to_async(
             rag_retrieval.retrieve_context_for_chat, thread_sensitive=False
         )(chat_history, user_prompt)
-        system_prompt = "\n\n".join(p for p in (persona_prompt, rag_context) if p) or None
+        system_prompt = (
+            "\n\n".join(p for p in (persona_prompt, rag_context) if p) or None
+        )
         # Plain columns on the already-fetched row — no query, safe to read
         # directly in this async method (unlike get_persona_system_prompt's
         # `.persona` access, which needs a real query when a persona is set).
@@ -291,7 +309,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             num_ctx = generation_params.get("num_ctx")
             if num_ctx:
                 stats["context_limit"] = num_ctx
-                stats["context_used"] = stats.get("prompt_tokens", 0) + stats.get("completion_tokens", 0)
+                stats["context_used"] = stats.get("prompt_tokens", 0) + stats.get(
+                    "completion_tokens", 0
+                )
 
             return dict(stats)
 
@@ -326,11 +346,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Structured output and tool calling are separate response shapes —
         # a schema-constrained JSON reply has nowhere to put an intermediate
         # tool call, so structured_output always wins when both are set.
-        use_tools = structured_output is None and chat_history.tools_enabled and ai_model.can_use_tools
+        use_tools = (
+            structured_output is None
+            and chat_history.tools_enabled
+            and ai_model.can_use_tools
+        )
         # MCP servers are global, not per-chat (see models.MCPServer) — only
         # worth a query when the tool path is actually going to run.
         mcp_servers = (
-            await database_sync_to_async(list)(models.MCPServer.objects.filter(enabled=True))
+            await database_sync_to_async(list)(
+                models.MCPServer.objects.filter(enabled=True)
+            )
             if use_tools
             else []
         )
@@ -368,10 +394,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     mcp_servers,
                 ):
                     if isinstance(chunk, dict):
-                        await self.send(text_data=json.dumps({"tool_call": chunk, "done": False}))
+                        await self.send(
+                            text_data=json.dumps({"tool_call": chunk, "done": False})
+                        )
                     else:
                         full_response += chunk
-                        await self.send(text_data=json.dumps({"message": chunk, "done": False}))
+                        await self.send(
+                            text_data=json.dumps({"message": chunk, "done": False})
+                        )
 
             else:
                 async for chunk in functions.astream_bot_response(
@@ -385,10 +415,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     stats,
                 ):
                     full_response += chunk
-                    await self.send(text_data=json.dumps({"message": chunk, "done": False}))
+                    await self.send(
+                        text_data=json.dumps({"message": chunk, "done": False})
+                    )
 
             if not full_response:
-                await self._send_error("The model returned an empty response. Try again.")
+                await self._send_error(
+                    "The model returned an empty response. Try again."
+                )
                 return
 
             await persist(full_response)
@@ -426,7 +460,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @staticmethod
     def _load_history(chat_history) -> list[dict[str, str]]:
-        return functions.deserialize_messages(functions.get_messages_for_chat(chat_history))
+        return functions.deserialize_messages(
+            functions.get_messages_for_chat(chat_history)
+        )
 
     @staticmethod
     def _validate_image(image: object) -> None:
@@ -455,13 +491,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if not isinstance(spec, dict):
                 raise ValueError(f"structured_output[{i}] must be an object.")
             if not isinstance(spec.get("field"), str) or not spec["field"].strip():
-                raise ValueError(f"structured_output[{i}].field must be a non-empty string.")
+                raise ValueError(
+                    f"structured_output[{i}].field must be a non-empty string."
+                )
             if not isinstance(spec.get("type"), str) or not spec["type"].strip():
-                raise ValueError(f"structured_output[{i}].type must be a non-empty string.")
+                raise ValueError(
+                    f"structured_output[{i}].type must be a non-empty string."
+                )
 
             description = spec.get("description")
             if description is not None and (
-                not isinstance(description, str) or len(description) > MAX_STRUCTURED_FIELD_DESCRIPTION_LENGTH
+                not isinstance(description, str)
+                or len(description) > MAX_STRUCTURED_FIELD_DESCRIPTION_LENGTH
             ):
                 raise ValueError(
                     f"structured_output[{i}].description must be a string of at most "
@@ -497,7 +538,9 @@ class CompareConsumer(AsyncWebsocketConsumer):
                 task.cancel()
 
     async def _send_error(self, target_key: str | None, message: str) -> None:
-        await self.send(text_data=json.dumps({"target": target_key, "error": message, "done": True}))
+        await self.send(
+            text_data=json.dumps({"target": target_key, "error": message, "done": True})
+        )
 
     async def _handle_stop(self) -> None:
         # Same asyncio.Task.cancel() + CancelledError-in-_run_one pattern
@@ -531,7 +574,9 @@ class CompareConsumer(AsyncWebsocketConsumer):
             return
 
         if any(not task.done() for task in self.active_tasks):
-            await self._send_error(None, "A comparison is already running. Wait for it to finish.")
+            await self._send_error(
+                None, "A comparison is already running. Wait for it to finish."
+            )
             return
 
         prompt = data.get("prompt", "")
@@ -542,11 +587,18 @@ class CompareConsumer(AsyncWebsocketConsumer):
             return
 
         if len(prompt) > MAX_MESSAGE_LENGTH:
-            await self._send_error(None, f"Prompt too long. Maximum length is {MAX_MESSAGE_LENGTH} characters.")
+            await self._send_error(
+                None,
+                f"Prompt too long. Maximum length is {MAX_MESSAGE_LENGTH} characters.",
+            )
             return
 
-        if not isinstance(targets, list) or not (1 <= len(targets) <= MAX_COMPARE_TARGETS):
-            await self._send_error(None, f"Provide between 1 and {MAX_COMPARE_TARGETS} models to compare.")
+        if not isinstance(targets, list) or not (
+            1 <= len(targets) <= MAX_COMPARE_TARGETS
+        ):
+            await self._send_error(
+                None, f"Provide between 1 and {MAX_COMPARE_TARGETS} models to compare."
+            )
             return
 
         parsed_targets: list[tuple[str, str]] = []
@@ -556,7 +608,9 @@ class CompareConsumer(AsyncWebsocketConsumer):
                 or not isinstance(target.get("model"), str)
                 or not isinstance(target.get("parameters"), str)
             ):
-                await self._send_error(None, "Each target needs a model and parameters.")
+                await self._send_error(
+                    None, "Each target needs a model and parameters."
+                )
                 return
             parsed_targets.append((target["model"], target["parameters"]))
 
@@ -584,7 +638,11 @@ class CompareConsumer(AsyncWebsocketConsumer):
             async for chunk in functions.astream_bot_response(
                 ai_model, parameters, prompt, "", [], None, None, stats
             ):
-                await self.send(text_data=json.dumps({"target": target_key, "message": chunk, "done": False}))
+                await self.send(
+                    text_data=json.dumps(
+                        {"target": target_key, "message": chunk, "done": False}
+                    )
+                )
 
             done_payload = {"target": target_key, "message": "", "done": True}
             if stats:
@@ -600,11 +658,20 @@ class CompareConsumer(AsyncWebsocketConsumer):
             # or unsafe (writing to a closed connection).
             if self.stopping:
                 await self.send(
-                    text_data=json.dumps({"target": target_key, "message": "", "done": True, "stopped": True})
+                    text_data=json.dumps(
+                        {
+                            "target": target_key,
+                            "message": "",
+                            "done": True,
+                            "stopped": True,
+                        }
+                    )
                 )
         except ModelUnavailableError as e:
             logger.warning("Model unavailable in CompareConsumer: %s", e)
             await self._send_error(target_key, str(e))
         except Exception:
             logger.exception("Unexpected error in CompareConsumer for %s", target_key)
-            await self._send_error(target_key, "An unexpected error occurred. Please try again.")
+            await self._send_error(
+                target_key, "An unexpected error occurred. Please try again."
+            )
