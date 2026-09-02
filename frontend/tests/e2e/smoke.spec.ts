@@ -10,9 +10,9 @@ import { expect, test } from '@playwright/test'
 test('landing page renders the hero and primary CTAs', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: /Welcome to/i })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Get Started' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Explore Models' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /chat UI for the models/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Get started/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Explore models/i })).toBeVisible()
 })
 
 test('nav bar reaches Chat and Models from the landing page', async ({ page }) => {
